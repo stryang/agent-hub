@@ -77,7 +77,6 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
     if (!runId) return;
 
     await getAgentHubApi().cancelRun(runId);
-    set({ status: "cancelled", runId: undefined });
   },
 
   appendEvent(event) {
