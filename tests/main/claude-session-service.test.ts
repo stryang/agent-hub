@@ -82,6 +82,20 @@ describe("ClaudeSessionService", () => {
       "11111111-1111-4111-8111-111111111111",
     );
 
+    expect(preview.session).toEqual({
+      id: "11111111-1111-4111-8111-111111111111",
+      title: "重构 CLI 切换模块",
+      projectPath: "/Users/leo/IdeaProjects/yang/agent-hub",
+      projectName: "agent-hub",
+      lastModified: Date.parse("2026-06-11T08:01:00.000Z"),
+      messageCount: 2,
+      transcriptPath: path.join(
+        tempDir,
+        "projects",
+        "-Users-leo-IdeaProjects-yang-agent-hub",
+        "11111111-1111-4111-8111-111111111111.jsonl",
+      ),
+    });
     expect(preview.events).toEqual([
       {
         type: "user_message",

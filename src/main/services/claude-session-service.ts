@@ -122,9 +122,9 @@ export class ClaudeSessionService {
 
       const message = record.message as TranscriptMessage | undefined;
       if (!message?.role) continue;
+      messageCount += 1;
 
       if (message.role === "user") {
-        messageCount += 1;
         const text = extractUserText(message.content);
         events.push({ type: "user_message", text, timestamp });
       }
