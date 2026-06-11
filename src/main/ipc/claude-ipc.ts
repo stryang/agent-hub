@@ -1,4 +1,5 @@
 import { ipcMain } from "electron";
+import type { ClaudeSessionService } from "../services/claude-session-service.js";
 import type { CommandValidator } from "../services/command-validator.js";
 import type { ClaudeValidationResult } from "../../shared/types/claude-config.js";
 
@@ -39,7 +40,10 @@ export function normalizeClaudeCommandPath(
   return { ok: true, commandPath: trimmedCommandPath };
 }
 
-export function registerClaudeIpc(commandValidator: CommandValidator) {
+export function registerClaudeIpc(
+  commandValidator: CommandValidator,
+  sessionService: ClaudeSessionService,
+) {
   ipcMain.handle("claude:validate", (_event, commandPath: unknown) => {
     const normalized = normalizeClaudeCommandPath(commandPath);
     if (!normalized.ok) {
@@ -48,4 +52,9 @@ export function registerClaudeIpc(commandValidator: CommandValidator) {
 
     return commandValidator.validate(normalized.commandPath);
   });
+
+  ipcMain.handle("claude:sessions:list", () => sessionService.listSessions());
+  ipcMain.handle("claude:sessions:load", (_event, sessionId: string) =>
+    sessionService.loadSession(sessionId),
+  );
 }
