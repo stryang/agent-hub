@@ -1,11 +1,15 @@
 import { BrowserWindow, ipcMain } from "electron";
 import type { ClaudeCodeAdapter } from "../services/claude-code-adapter.js";
+import type { PromptInput } from "../services/claude-code-adapter.js";
 import type { ClaudeSessionService } from "../services/claude-session-service.js";
 import type { CommandValidator } from "../services/command-validator.js";
 import type { ClaudeValidationResult } from "../../shared/types/claude-config.js";
 
 const MAX_COMMAND_PATH_LENGTH = 4_096;
 const MAX_SESSION_ID_LENGTH = 4_096;
+const MAX_PROMPT_LENGTH = 200_000;
+const MAX_CWD_LENGTH = 4_096;
+const MAX_RUN_ID_LENGTH = 4_096;
 
 export function normalizeClaudeCommandPath(
   commandPath: unknown,
@@ -58,6 +62,63 @@ export function normalizeClaudeSessionId(sessionId: unknown): string {
   return trimmedSessionId;
 }
 
+export function normalizeClaudePromptInput(input: unknown): PromptInput {
+  if (!isRecord(input)) {
+    throw new Error("Invalid Claude prompt payload.");
+  }
+
+  if (typeof input.prompt !== "string") {
+    throw new Error("Claude prompt must be a non-empty string.");
+  }
+
+  const prompt = input.prompt.trim();
+  if (prompt.length === 0) {
+    throw new Error("Claude prompt must be a non-empty string.");
+  }
+
+  if (prompt.length > MAX_PROMPT_LENGTH) {
+    throw new Error("Claude prompt is too long.");
+  }
+
+  const normalized: PromptInput = { prompt };
+
+  if (input.sessionId !== undefined) {
+    normalized.sessionId = normalizeClaudeSessionId(input.sessionId);
+  }
+
+  if (input.cwd !== undefined) {
+    if (typeof input.cwd !== "string") {
+      throw new Error("Claude cwd must be a non-empty string.");
+    }
+
+    const cwd = input.cwd.trim();
+    if (cwd.length === 0) {
+      throw new Error("Claude cwd must be a non-empty string.");
+    }
+
+    if (cwd.length > MAX_CWD_LENGTH) {
+      throw new Error("Claude cwd is too long.");
+    }
+
+    normalized.cwd = cwd;
+  }
+
+  return normalized;
+}
+
+export function normalizeClaudeRunId(runId: unknown): string {
+  if (typeof runId !== "string") {
+    throw new Error("Invalid Claude run id.");
+  }
+
+  const trimmedRunId = runId.trim();
+  if (trimmedRunId.length === 0 || trimmedRunId.length > MAX_RUN_ID_LENGTH) {
+    throw new Error("Invalid Claude run id.");
+  }
+
+  return trimmedRunId;
+}
+
 export function registerClaudeIpc(
   commandValidator: CommandValidator,
   sessionService: ClaudeSessionService,
@@ -76,14 +137,21 @@ export function registerClaudeIpc(
   ipcMain.handle("claude:sessions:load", (_event, sessionId: unknown) => {
     return sessionService.loadSession(normalizeClaudeSessionId(sessionId));
   });
-  ipcMain.handle("claude:prompt", (_event, input) => {
-    return claudeCodeAdapter.runPrompt(input, (agentEvent) => {
-      for (const window of BrowserWindow.getAllWindows()) {
-        window.webContents.send("agent:event", agentEvent);
-      }
-    });
+  ipcMain.handle("claude:prompt", (_event, input: unknown) => {
+    return claudeCodeAdapter.runPrompt(
+      normalizeClaudePromptInput(input),
+      (agentEvent) => {
+        for (const window of BrowserWindow.getAllWindows()) {
+          window.webContents.send("agent:event", agentEvent);
+        }
+      },
+    );
   });
-  ipcMain.handle("claude:cancel", (_event, runId: string) => {
-    claudeCodeAdapter.cancelRun(runId);
+  ipcMain.handle("claude:cancel", (_event, runId: unknown) => {
+    claudeCodeAdapter.cancelRun(normalizeClaudeRunId(runId));
   });
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

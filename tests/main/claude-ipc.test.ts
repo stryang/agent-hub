@@ -99,3 +99,101 @@ describe("normalizeClaudeSessionId", () => {
     ).toBe("11111111-1111-4111-8111-111111111111");
   });
 });
+
+describe("normalizeClaudePromptInput", () => {
+  it("rejects non-object payloads", async () => {
+    const { normalizeClaudePromptInput } = await import(
+      "../../src/main/ipc/claude-ipc"
+    );
+
+    expect(() => normalizeClaudePromptInput(null)).toThrow(
+      "Invalid Claude prompt payload.",
+    );
+  });
+
+  it("rejects empty prompts", async () => {
+    const { normalizeClaudePromptInput } = await import(
+      "../../src/main/ipc/claude-ipc"
+    );
+
+    expect(() => normalizeClaudePromptInput({ prompt: "   " })).toThrow(
+      "Claude prompt must be a non-empty string.",
+    );
+  });
+
+  it("rejects too-long prompts", async () => {
+    const { normalizeClaudePromptInput } = await import(
+      "../../src/main/ipc/claude-ipc"
+    );
+
+    expect(() =>
+      normalizeClaudePromptInput({ prompt: "x".repeat(200_001) }),
+    ).toThrow("Claude prompt is too long.");
+  });
+
+  it("rejects invalid cwd", async () => {
+    const { normalizeClaudePromptInput } = await import(
+      "../../src/main/ipc/claude-ipc"
+    );
+
+    expect(() =>
+      normalizeClaudePromptInput({ prompt: "hello", cwd: "   " }),
+    ).toThrow("Claude cwd must be a non-empty string.");
+  });
+
+  it("normalizes prompt input", async () => {
+    const { normalizeClaudePromptInput } = await import(
+      "../../src/main/ipc/claude-ipc"
+    );
+
+    expect(
+      normalizeClaudePromptInput({
+        prompt: "  hello  ",
+        sessionId: "  11111111-1111-4111-8111-111111111111  ",
+        cwd: "  /tmp  ",
+      }),
+    ).toEqual({
+      prompt: "hello",
+      sessionId: "11111111-1111-4111-8111-111111111111",
+      cwd: "/tmp",
+    });
+  });
+});
+
+describe("normalizeClaudeRunId", () => {
+  it("rejects non-string run ids", async () => {
+    const { normalizeClaudeRunId } = await import(
+      "../../src/main/ipc/claude-ipc"
+    );
+
+    expect(() => normalizeClaudeRunId(null)).toThrow("Invalid Claude run id.");
+  });
+
+  it("rejects empty run ids", async () => {
+    const { normalizeClaudeRunId } = await import(
+      "../../src/main/ipc/claude-ipc"
+    );
+
+    expect(() => normalizeClaudeRunId("   ")).toThrow(
+      "Invalid Claude run id.",
+    );
+  });
+
+  it("rejects too-long run ids", async () => {
+    const { normalizeClaudeRunId } = await import(
+      "../../src/main/ipc/claude-ipc"
+    );
+
+    expect(() => normalizeClaudeRunId("x".repeat(4_097))).toThrow(
+      "Invalid Claude run id.",
+    );
+  });
+
+  it("trims valid run ids", async () => {
+    const { normalizeClaudeRunId } = await import(
+      "../../src/main/ipc/claude-ipc"
+    );
+
+    expect(normalizeClaudeRunId("  run-id  ")).toBe("run-id");
+  });
+});

@@ -1,10 +1,19 @@
 import { spawn } from "node:child_process";
-import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import type { AgentUiEvent, ToolKind } from "../../shared/types/agent-events.js";
 
+const DEFAULT_STDOUT_BUFFER_LIMIT = 1024 * 1024;
+const DEFAULT_RAW_OUTPUT_LIMIT = 64 * 1024;
+const DEFAULT_SIGTERM_DELAY_MS = 500;
+const DEFAULT_SIGKILL_DELAY_MS = 2_000;
+
 export interface ClaudeCodeAdapterOptions {
   commandPath: string;
+  spawnProcess?: SpawnClaudeProcess;
+  stdoutBufferLimit?: number;
+  rawOutputLimit?: number;
+  sigtermDelayMs?: number;
+  sigkillDelayMs?: number;
 }
 
 export interface PromptInput {
@@ -15,6 +24,33 @@ export interface PromptInput {
 
 type EmitAgentEvent = (event: AgentUiEvent) => void;
 type ToolStartEvent = Extract<AgentUiEvent, { type: "tool_start" }>;
+type Timer = ReturnType<typeof setTimeout>;
+
+export interface ClaudeProcessStream {
+  setEncoding(encoding: BufferEncoding): void;
+  on(event: "data", listener: (chunk: string) => void): this;
+}
+
+export interface ClaudeProcess {
+  stdout: ClaudeProcessStream;
+  stderr: ClaudeProcessStream;
+  on(event: "error", listener: (error: Error) => void): this;
+  on(event: "close", listener: (code: number | null) => void): this;
+  kill(signal: NodeJS.Signals): boolean;
+}
+
+export type SpawnClaudeProcess = (
+  commandPath: string,
+  args: string[],
+  options: { cwd?: string; stdio: ["ignore", "pipe", "pipe"] },
+) => ClaudeProcess;
+
+interface ActiveRun {
+  child: ClaudeProcess;
+  cancelled: boolean;
+  sigtermTimer?: Timer;
+  sigkillTimer?: Timer;
+}
 
 interface ClaudeContentBlock {
   type?: unknown;
@@ -24,19 +60,27 @@ interface ClaudeContentBlock {
   content?: unknown;
 }
 
-interface ClaudeMessageEnvelope {
-  message?: {
-    content?: unknown;
-  };
-}
-
 export class ClaudeCodeAdapter {
   private readonly commandPath: string;
-  private readonly activeRuns = new Map<string, ChildProcessWithoutNullStreams>();
+  private readonly spawnProcess: SpawnClaudeProcess;
+  private readonly stdoutBufferLimit: number;
+  private readonly rawOutputLimit: number;
+  private readonly sigtermDelayMs: number;
+  private readonly sigkillDelayMs: number;
+  private readonly activeRuns = new Map<string, ActiveRun>();
   private activeTool: ToolKind | null = null;
 
   constructor(options: ClaudeCodeAdapterOptions) {
     this.commandPath = options.commandPath;
+    this.spawnProcess =
+      options.spawnProcess ??
+      ((commandPath, args, spawnOptions) =>
+        spawn(commandPath, args, spawnOptions) as unknown as ClaudeProcess);
+    this.stdoutBufferLimit =
+      options.stdoutBufferLimit ?? DEFAULT_STDOUT_BUFFER_LIMIT;
+    this.rawOutputLimit = options.rawOutputLimit ?? DEFAULT_RAW_OUTPUT_LIMIT;
+    this.sigtermDelayMs = options.sigtermDelayMs ?? DEFAULT_SIGTERM_DELAY_MS;
+    this.sigkillDelayMs = options.sigkillDelayMs ?? DEFAULT_SIGKILL_DELAY_MS;
   }
 
   runPrompt(input: PromptInput, emit: EmitAgentEvent): { runId: string } {
@@ -53,12 +97,16 @@ export class ClaudeCodeAdapter {
       args.push("--resume", input.sessionId);
     }
 
-    const child = spawn(this.commandPath, args, {
+    const child = this.spawnProcess(this.commandPath, args, {
       cwd: input.cwd,
       stdio: ["ignore", "pipe", "pipe"],
     });
+    const activeRun: ActiveRun = {
+      child,
+      cancelled: false,
+    };
 
-    this.activeRuns.set(runId, child as unknown as ChildProcessWithoutNullStreams);
+    this.activeRuns.set(runId, activeRun);
 
     let stdoutBuffer = "";
     child.stdout.setEncoding("utf8");
@@ -73,11 +121,30 @@ export class ClaudeCodeAdapter {
           emit(event);
         }
       }
+
+      if (stdoutBuffer.length > this.stdoutBufferLimit) {
+        emit({
+          type: "error",
+          message: "Claude stdout exceeded the buffer limit.",
+          detail: `Discarded ${stdoutBuffer.length} characters without a newline.`,
+          timestamp: Date.now(),
+        });
+        emit({
+          type: "raw_output",
+          text: this.truncateRawOutput(stdoutBuffer, "stdout"),
+          timestamp: Date.now(),
+        });
+        stdoutBuffer = "";
+      }
     });
 
     child.stderr.setEncoding("utf8");
     child.stderr.on("data", (chunk: string) => {
-      emit({ type: "raw_output", text: chunk, timestamp: Date.now() });
+      emit({
+        type: "raw_output",
+        text: this.truncateRawOutput(chunk, "stderr"),
+        timestamp: Date.now(),
+      });
     });
 
     child.on("error", (error) => {
@@ -89,13 +156,25 @@ export class ClaudeCodeAdapter {
     });
 
     child.on("close", (code) => {
+      this.clearCancellationTimers(activeRun);
+
       if (stdoutBuffer.length > 0) {
         for (const event of this.parseLine(stdoutBuffer, Date.now())) {
           emit(event);
         }
       }
 
-      if (code !== 0 && code !== null) {
+      if (activeRun.cancelled) {
+        if (this.activeTool) {
+          emit({ type: "tool_done", status: "cancelled", timestamp: Date.now() });
+        } else {
+          emit({
+            type: "raw_output",
+            text: "Claude Code run cancelled.",
+            timestamp: Date.now(),
+          });
+        }
+      } else if (code !== 0 && code !== null) {
         emit({
           type: "error",
           message: `Claude Code exited with code ${code}.`,
@@ -111,11 +190,20 @@ export class ClaudeCodeAdapter {
   }
 
   cancelRun(runId: string): void {
-    const child = this.activeRuns.get(runId);
-    if (!child) return;
+    const activeRun = this.activeRuns.get(runId);
+    if (!activeRun || activeRun.cancelled) return;
 
-    child.kill("SIGINT");
-    this.activeRuns.delete(runId);
+    activeRun.cancelled = true;
+    activeRun.child.kill("SIGINT");
+    activeRun.sigtermTimer = setTimeout(() => {
+      if (this.activeRuns.get(runId) !== activeRun) return;
+      activeRun.child.kill("SIGTERM");
+    }, this.sigtermDelayMs);
+
+    activeRun.sigkillTimer = setTimeout(() => {
+      if (this.activeRuns.get(runId) !== activeRun) return;
+      activeRun.child.kill("SIGKILL");
+    }, this.sigkillDelayMs);
   }
 
   parseLine(line: string, timestamp: number): AgentUiEvent[] {
@@ -126,7 +214,16 @@ export class ClaudeCodeAdapter {
       return [{ type: "raw_output", text: line, timestamp }];
     }
 
-    const content = (parsed as ClaudeMessageEnvelope).message?.content;
+    if (!isRecord(parsed)) {
+      return [{ type: "raw_output", text: line, timestamp }];
+    }
+
+    if (parsed.type === "result" && typeof parsed.session_id === "string") {
+      return [];
+    }
+
+    const message = isRecord(parsed.message) ? parsed.message : undefined;
+    const content = message?.content;
     if (!Array.isArray(content)) {
       return [{ type: "raw_output", text: line, timestamp }];
     }
@@ -146,6 +243,10 @@ export class ClaudeCodeAdapter {
     block: ClaudeContentBlock,
     timestamp: number,
   ): AgentUiEvent[] {
+    if (!isRecord(block)) {
+      return [];
+    }
+
     if (block.type === "text" && typeof block.text === "string") {
       return [{ type: "assistant_message", text: block.text, timestamp }];
     }
@@ -156,9 +257,10 @@ export class ClaudeCodeAdapter {
       return [event];
     }
 
-    if (block.type === "tool_result" && typeof block.content === "string") {
+    if (block.type === "tool_result") {
+      const output = toolResultContentToText(block.content);
       const events: AgentUiEvent[] = [
-        { type: "tool_output", text: block.content, timestamp },
+        { type: "tool_output", text: output, timestamp },
       ];
 
       events.push({ type: "tool_done", status: "success", timestamp });
@@ -191,21 +293,68 @@ export class ClaudeCodeAdapter {
 
     return event;
   }
+
+  private truncateRawOutput(text: string, label: "stdout" | "stderr"): string {
+    if (text.length <= this.rawOutputLimit) {
+      return text;
+    }
+
+    const omitted = text.length - this.rawOutputLimit;
+    return `${text.slice(0, this.rawOutputLimit)}\n[Claude ${label} truncated: ${omitted} characters omitted.]`;
+  }
+
+  private clearCancellationTimers(activeRun: ActiveRun): void {
+    if (activeRun.sigtermTimer) {
+      clearTimeout(activeRun.sigtermTimer);
+    }
+
+    if (activeRun.sigkillTimer) {
+      clearTimeout(activeRun.sigkillTimer);
+    }
+  }
 }
 
 function normalizeToolKind(name: unknown): ToolKind {
-  switch (name) {
-    case "Read":
+  if (typeof name !== "string") {
+    return "unknown";
+  }
+
+  switch (name.toLowerCase()) {
+    case "read":
       return "read";
-    case "Edit":
+    case "edit":
       return "edit";
-    case "Write":
+    case "write":
       return "write";
-    case "Bash":
+    case "bash":
       return "bash";
     default:
       return "unknown";
   }
+}
+
+function toolResultContentToText(content: unknown): string {
+  if (typeof content === "string") {
+    return content;
+  }
+
+  if (Array.isArray(content)) {
+    return content.map((item) => toolResultContentToText(item)).join("\n");
+  }
+
+  if (isRecord(content)) {
+    if (typeof content.text === "string") {
+      return content.text;
+    }
+
+    if (typeof content.content === "string") {
+      return content.content;
+    }
+
+    return JSON.stringify(content);
+  }
+
+  return String(content);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
