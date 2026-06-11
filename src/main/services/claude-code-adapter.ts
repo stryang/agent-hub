@@ -184,12 +184,16 @@ export class ClaudeCodeAdapter {
             timestamp: Date.now(),
           });
         }
+        emit({ type: "run_done", status: "cancelled", timestamp: Date.now() });
       } else if (code !== 0 && code !== null) {
         emit({
           type: "error",
           message: `Claude Code exited with code ${code}.`,
           timestamp: Date.now(),
         });
+        emit({ type: "run_done", status: "failed", timestamp: Date.now() });
+      } else {
+        emit({ type: "run_done", status: "success", timestamp: Date.now() });
       }
 
       this.activeRuns.delete(runId);

@@ -19,6 +19,7 @@ export type AgentUiEvent =
     }
   | { type: "tool_output"; text: string; timestamp: number }
   | { type: "tool_done"; status: ToolStatus; timestamp: number }
+  | { type: "run_done"; status: ToolStatus; timestamp: number }
   | { type: "diff"; filePath: string; unifiedDiff: string; timestamp: number }
   | {
       type: "permission_prompt";

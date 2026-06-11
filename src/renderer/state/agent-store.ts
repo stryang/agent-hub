@@ -92,7 +92,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
 function statusAfterEvent(event: AgentUiEvent, currentStatus: RunStatus): RunStatus {
   if (event.type === "error") return "failed";
 
-  if (event.type === "tool_done") {
+  if (event.type === "run_done") {
     if (event.status === "success") return "idle";
     if (event.status === "failed") return "failed";
     return "cancelled";
@@ -102,5 +102,5 @@ function statusAfterEvent(event: AgentUiEvent, currentStatus: RunStatus): RunSta
 }
 
 function shouldClearRunId(event: AgentUiEvent) {
-  return event.type === "error" || event.type === "tool_done";
+  return event.type === "error" || event.type === "run_done";
 }
