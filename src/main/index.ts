@@ -1,9 +1,13 @@
 import { app, BrowserWindow } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { registerConfigIpc } from "./ipc/config-ipc.js";
+import { AppConfigStore } from "./services/app-config-store.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = process.env.NODE_ENV === "development";
+
+registerConfigIpc(new AppConfigStore(app.getPath("userData")));
 
 async function createWindow() {
   const win = new BrowserWindow({
