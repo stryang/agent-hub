@@ -48,8 +48,14 @@ export type SpawnClaudeProcess = (
 interface ActiveRun {
   child: ClaudeProcess;
   cancelled: boolean;
+  activeTool: ToolKind | null;
+  stdoutBuffer: string;
   sigtermTimer?: Timer;
   sigkillTimer?: Timer;
+}
+
+interface RunParseState {
+  activeTool: ToolKind | null;
 }
 
 interface ClaudeContentBlock {
@@ -68,7 +74,6 @@ export class ClaudeCodeAdapter {
   private readonly sigtermDelayMs: number;
   private readonly sigkillDelayMs: number;
   private readonly activeRuns = new Map<string, ActiveRun>();
-  private activeTool: ToolKind | null = null;
 
   constructor(options: ClaudeCodeAdapterOptions) {
     this.commandPath = options.commandPath;
@@ -104,37 +109,38 @@ export class ClaudeCodeAdapter {
     const activeRun: ActiveRun = {
       child,
       cancelled: false,
+      activeTool: null,
+      stdoutBuffer: "",
     };
 
     this.activeRuns.set(runId, activeRun);
 
-    let stdoutBuffer = "";
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", (chunk: string) => {
-      stdoutBuffer += chunk;
-      const lines = stdoutBuffer.split(/\r?\n/);
-      stdoutBuffer = lines.pop() ?? "";
+      activeRun.stdoutBuffer += chunk;
+      const lines = activeRun.stdoutBuffer.split(/\r?\n/);
+      activeRun.stdoutBuffer = lines.pop() ?? "";
 
       for (const line of lines) {
         if (line.length === 0) continue;
-        for (const event of this.parseLine(line, Date.now())) {
+        for (const event of this.parseLineForRun(line, Date.now(), activeRun)) {
           emit(event);
         }
       }
 
-      if (stdoutBuffer.length > this.stdoutBufferLimit) {
+      if (activeRun.stdoutBuffer.length > this.stdoutBufferLimit) {
         emit({
           type: "error",
           message: "Claude stdout exceeded the buffer limit.",
-          detail: `Discarded ${stdoutBuffer.length} characters without a newline.`,
+          detail: `Discarded ${activeRun.stdoutBuffer.length} characters without a newline.`,
           timestamp: Date.now(),
         });
         emit({
           type: "raw_output",
-          text: this.truncateRawOutput(stdoutBuffer, "stdout"),
+          text: this.truncateOutput(activeRun.stdoutBuffer, "stdout"),
           timestamp: Date.now(),
         });
-        stdoutBuffer = "";
+        activeRun.stdoutBuffer = "";
       }
     });
 
@@ -142,7 +148,7 @@ export class ClaudeCodeAdapter {
     child.stderr.on("data", (chunk: string) => {
       emit({
         type: "raw_output",
-        text: this.truncateRawOutput(chunk, "stderr"),
+        text: this.truncateOutput(chunk, "stderr"),
         timestamp: Date.now(),
       });
     });
@@ -158,14 +164,18 @@ export class ClaudeCodeAdapter {
     child.on("close", (code) => {
       this.clearCancellationTimers(activeRun);
 
-      if (stdoutBuffer.length > 0) {
-        for (const event of this.parseLine(stdoutBuffer, Date.now())) {
+      if (activeRun.stdoutBuffer.length > 0) {
+        for (const event of this.parseLineForRun(
+          activeRun.stdoutBuffer,
+          Date.now(),
+          activeRun,
+        )) {
           emit(event);
         }
       }
 
       if (activeRun.cancelled) {
-        if (this.activeTool) {
+        if (activeRun.activeTool) {
           emit({ type: "tool_done", status: "cancelled", timestamp: Date.now() });
         } else {
           emit({
@@ -183,7 +193,6 @@ export class ClaudeCodeAdapter {
       }
 
       this.activeRuns.delete(runId);
-      this.activeTool = null;
     });
 
     return { runId };
@@ -207,15 +216,31 @@ export class ClaudeCodeAdapter {
   }
 
   parseLine(line: string, timestamp: number): AgentUiEvent[] {
+    return this.parseLineWithState(line, timestamp, { activeTool: null });
+  }
+
+  private parseLineForRun(
+    line: string,
+    timestamp: number,
+    runState: RunParseState,
+  ): AgentUiEvent[] {
+    return this.parseLineWithState(line, timestamp, runState);
+  }
+
+  private parseLineWithState(
+    line: string,
+    timestamp: number,
+    runState: RunParseState,
+  ): AgentUiEvent[] {
     let parsed: unknown;
     try {
       parsed = JSON.parse(line);
     } catch {
-      return [{ type: "raw_output", text: line, timestamp }];
+      return [this.capEventText({ type: "raw_output", text: line, timestamp }, "stdout")];
     }
 
     if (!isRecord(parsed)) {
-      return [{ type: "raw_output", text: line, timestamp }];
+      return [this.capEventText({ type: "raw_output", text: line, timestamp }, "stdout")];
     }
 
     if (parsed.type === "result" && typeof parsed.session_id === "string") {
@@ -225,23 +250,24 @@ export class ClaudeCodeAdapter {
     const message = isRecord(parsed.message) ? parsed.message : undefined;
     const content = message?.content;
     if (!Array.isArray(content)) {
-      return [{ type: "raw_output", text: line, timestamp }];
+      return [this.capEventText({ type: "raw_output", text: line, timestamp }, "stdout")];
     }
 
     const events = content.flatMap((block) =>
-      this.contentBlockToEvents(block, timestamp),
+      this.contentBlockToEvents(block, timestamp, runState),
     );
 
     if (events.length === 0) {
-      return [{ type: "raw_output", text: line, timestamp }];
+      return [this.capEventText({ type: "raw_output", text: line, timestamp }, "stdout")];
     }
 
-    return events;
+    return events.map((event) => this.capEventText(event, "stdout"));
   }
 
   private contentBlockToEvents(
     block: ClaudeContentBlock,
     timestamp: number,
+    runState: RunParseState,
   ): AgentUiEvent[] {
     if (!isRecord(block)) {
       return [];
@@ -253,7 +279,7 @@ export class ClaudeCodeAdapter {
 
     if (block.type === "tool_use") {
       const event = this.toolUseToEvent(block, timestamp);
-      this.activeTool = event.tool;
+      runState.activeTool = event.tool;
       return [event];
     }
 
@@ -264,7 +290,7 @@ export class ClaudeCodeAdapter {
       ];
 
       events.push({ type: "tool_done", status: "success", timestamp });
-      this.activeTool = null;
+      runState.activeTool = null;
 
       return events;
     }
@@ -294,7 +320,36 @@ export class ClaudeCodeAdapter {
     return event;
   }
 
-  private truncateRawOutput(text: string, label: "stdout" | "stderr"): string {
+  private capEventText(event: AgentUiEvent, label: "stdout" | "stderr"): AgentUiEvent {
+    switch (event.type) {
+      case "assistant_message":
+      case "tool_output":
+      case "permission_prompt":
+      case "raw_output":
+        return {
+          ...event,
+          text: this.truncateOutput(event.text, label),
+        };
+      case "error":
+        return {
+          ...event,
+          message: this.truncateOutput(event.message, label),
+          detail:
+            event.detail === undefined
+              ? undefined
+              : this.truncateOutput(event.detail, label),
+        };
+      case "diff":
+        return {
+          ...event,
+          unifiedDiff: this.truncateOutput(event.unifiedDiff, label),
+        };
+      default:
+        return event;
+    }
+  }
+
+  private truncateOutput(text: string, label: "stdout" | "stderr"): string {
     if (text.length <= this.rawOutputLimit) {
       return text;
     }
