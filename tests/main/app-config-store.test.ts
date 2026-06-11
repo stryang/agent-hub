@@ -37,4 +37,10 @@ describe("AppConfigStore", () => {
     const store = new AppConfigStore(tempDir);
     await expect(store.get()).rejects.toThrow("Agent Hub config is not valid JSON");
   });
+
+  it("throws a clear error for null JSON", async () => {
+    await fs.writeFile(path.join(tempDir, "config.json"), "null", "utf8");
+    const store = new AppConfigStore(tempDir);
+    await expect(store.get()).rejects.toThrow("Agent Hub config has invalid shape");
+  });
 });

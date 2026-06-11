@@ -14,6 +14,8 @@ export class AppConfigStore {
       const raw = await fs.readFile(this.filePath, "utf8");
       const parsed = JSON.parse(raw) as Partial<ClaudeConfig>;
       if (
+        parsed === null ||
+        typeof parsed !== "object" ||
         typeof parsed.commandPath !== "string" ||
         typeof parsed.defaultWorkingDirectory !== "string"
       ) {
