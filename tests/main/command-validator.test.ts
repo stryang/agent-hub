@@ -87,4 +87,45 @@ describe("CommandValidator", () => {
       code: "auth_failed",
     });
   });
+
+  it("times out slow command validation", async () => {
+    const file = path.join(tempDir, "claude");
+    await fs.writeFile(
+      file,
+      '#!/bin/sh\nif [ "$1" = "--version" ]; then while :; do :; done; fi\n',
+      "utf8",
+    );
+    await fs.chmod(file, 0o755);
+    const validator = new CommandValidator(undefined, { timeoutMs: 20 });
+
+    await expect(validator.validate(file)).resolves.toMatchObject({
+      ok: false,
+      code: "version_failed",
+      detail: "Command timed out",
+    });
+  });
+
+  it("caps command output diagnostics", async () => {
+    const file = path.join(tempDir, "claude");
+    await fs.writeFile(
+      file,
+      [
+        "#!/bin/sh",
+        'if [ "$1" = "--version" ]; then',
+        "  head -c 20000 /dev/zero | tr '\\0' x",
+        "  exit 1",
+        "fi",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+    await fs.chmod(file, 0o755);
+    const validator = new CommandValidator(undefined, { outputLimit: 32 });
+
+    await expect(validator.validate(file)).resolves.toMatchObject({
+      ok: false,
+      code: "version_failed",
+      detail: "x".repeat(32),
+    });
+  });
 });
