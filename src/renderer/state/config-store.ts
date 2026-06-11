@@ -3,6 +3,7 @@ import type {
   ClaudeConfig,
   ClaudeValidationResult,
 } from "../../shared/types/claude-config";
+import { getAgentHubApi } from "./agent-hub-api";
 
 type ConfigStore = {
   config: ClaudeConfig | null;
@@ -21,7 +22,7 @@ export const useConfigStore = create<ConfigStore>((set) => ({
   async loadConfig() {
     set({ loading: true });
     try {
-      const config = await window.agentHub.getConfig();
+      const config = await getAgentHubApi().getConfig();
       set({ config });
     } finally {
       set({ loading: false });
@@ -29,13 +30,13 @@ export const useConfigStore = create<ConfigStore>((set) => ({
   },
 
   async validate(commandPath) {
-    const validation = await window.agentHub.validateClaude(commandPath);
+    const validation = await getAgentHubApi().validateClaude(commandPath);
     set({ validation });
     return validation;
   },
 
   async save(config) {
-    const savedConfig = await window.agentHub.saveConfig(config);
+    const savedConfig = await getAgentHubApi().saveConfig(config);
     set({ config: savedConfig });
     return savedConfig;
   },

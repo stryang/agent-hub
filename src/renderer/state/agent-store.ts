@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { AgentUiEvent, RunStatus } from "../../shared/types/agent-events";
 import type { ClaudeSessionGroup } from "../../shared/types/sessions";
+import { getAgentHubApi } from "./agent-hub-api";
 import { useConfigStore } from "./config-store";
 
 type AgentStore = {
@@ -22,12 +23,12 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   status: "idle",
 
   async loadSessions() {
-    const sessions = await window.agentHub.listSessions();
+    const sessions = await getAgentHubApi().listSessions();
     set({ sessions });
   },
 
   async selectSession(sessionId) {
-    const preview = await window.agentHub.loadSession(sessionId);
+    const preview = await getAgentHubApi().loadSession(sessionId);
     set({
       selectedSessionId: preview.session.id,
       events: preview.events,
@@ -46,16 +47,15 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
 
     set((state) => ({
       events: [...state.events, { type: "user_message", text, timestamp }],
-      status: "running",
     }));
 
     try {
-      const response = await window.agentHub.sendPrompt({
+      const response = await getAgentHubApi().sendPrompt({
         prompt: text,
         sessionId: selectedSessionId,
         cwd: config?.defaultWorkingDirectory || undefined,
       });
-      set({ runId: response.runId });
+      set({ runId: response.runId, status: "running" });
     } catch (error) {
       set((state) => ({
         status: "failed",
@@ -74,19 +74,33 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
 
   async cancel() {
     const { runId } = get();
-    if (!runId) {
-      set({ status: "cancelled" });
-      return;
-    }
+    if (!runId) return;
 
-    await window.agentHub.cancelRun(runId);
+    await getAgentHubApi().cancelRun(runId);
     set({ status: "cancelled", runId: undefined });
   },
 
   appendEvent(event) {
     set((state) => ({
       events: [...state.events, event],
-      status: event.type === "error" ? "failed" : state.status,
+      status: statusAfterEvent(event, state.status),
+      runId: shouldClearRunId(event) ? undefined : state.runId,
     }));
   },
 }));
+
+function statusAfterEvent(event: AgentUiEvent, currentStatus: RunStatus): RunStatus {
+  if (event.type === "error") return "failed";
+
+  if (event.type === "tool_done") {
+    if (event.status === "success") return "idle";
+    if (event.status === "failed") return "failed";
+    return "cancelled";
+  }
+
+  return currentStatus;
+}
+
+function shouldClearRunId(event: AgentUiEvent) {
+  return event.type === "error" || event.type === "tool_done";
+}
