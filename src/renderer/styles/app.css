@@ -136,7 +136,10 @@
   border-bottom: 0;
 }
 
-.cli-opt:hover,
+.cli-opt:hover {
+  background: var(--hover);
+}
+
 .cli-opt.sel {
   background: var(--accent-dim);
 }
@@ -448,7 +451,6 @@
 .code {
   align-items: center;
   display: flex;
-  overflow: auto;
   padding-left: 4px;
   white-space: pre;
 }
@@ -565,6 +567,7 @@
 }
 
 textarea {
+  font-size: 13.5px;
   max-height: 160px;
   min-height: 46px;
   outline: 0;
