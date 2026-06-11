@@ -27,3 +27,15 @@ Agent Hub is a macOS arm64 Electron app that presents a polished UI for local ag
 - Keep main/preload/renderer responsibilities separate.
 - Add tests around adapters, command validation, session indexing, and diff collection.
 - Prefer explicit typed events over ad hoc parsing in UI components.
+
+## Development Commands
+
+- `npm install`
+- `npm run lint`
+- `npm test`
+- `npm run build`
+
+## Local Files
+
+- `design/` and `tests/` are intentionally ignored; do not commit them.
+- Use `design/` only as a visual reference and source of local UI assets.
