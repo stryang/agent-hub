@@ -1,4 +1,5 @@
-import { ipcMain } from "electron";
+import { BrowserWindow, ipcMain } from "electron";
+import type { ClaudeCodeAdapter } from "../services/claude-code-adapter.js";
 import type { ClaudeSessionService } from "../services/claude-session-service.js";
 import type { CommandValidator } from "../services/command-validator.js";
 import type { ClaudeValidationResult } from "../../shared/types/claude-config.js";
@@ -60,6 +61,7 @@ export function normalizeClaudeSessionId(sessionId: unknown): string {
 export function registerClaudeIpc(
   commandValidator: CommandValidator,
   sessionService: ClaudeSessionService,
+  claudeCodeAdapter: ClaudeCodeAdapter,
 ) {
   ipcMain.handle("claude:validate", (_event, commandPath: unknown) => {
     const normalized = normalizeClaudeCommandPath(commandPath);
@@ -73,5 +75,15 @@ export function registerClaudeIpc(
   ipcMain.handle("claude:sessions:list", () => sessionService.listSessions());
   ipcMain.handle("claude:sessions:load", (_event, sessionId: unknown) => {
     return sessionService.loadSession(normalizeClaudeSessionId(sessionId));
+  });
+  ipcMain.handle("claude:prompt", (_event, input) => {
+    return claudeCodeAdapter.runPrompt(input, (agentEvent) => {
+      for (const window of BrowserWindow.getAllWindows()) {
+        window.webContents.send("agent:event", agentEvent);
+      }
+    });
+  });
+  ipcMain.handle("claude:cancel", (_event, runId: string) => {
+    claudeCodeAdapter.cancelRun(runId);
   });
 }

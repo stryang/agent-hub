@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { registerClaudeIpc } from "./ipc/claude-ipc.js";
 import { registerConfigIpc } from "./ipc/config-ipc.js";
 import { AppConfigStore } from "./services/app-config-store.js";
+import { ClaudeCodeAdapter } from "./services/claude-code-adapter.js";
 import { ClaudeSessionService } from "./services/claude-session-service.js";
 import { CommandValidator } from "./services/command-validator.js";
 
@@ -11,7 +12,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = process.env.NODE_ENV === "development";
 
 registerConfigIpc(new AppConfigStore(app.getPath("userData")));
-registerClaudeIpc(new CommandValidator(), new ClaudeSessionService());
+registerClaudeIpc(
+  new CommandValidator(),
+  new ClaudeSessionService(),
+  new ClaudeCodeAdapter({ commandPath: "claude" }),
+);
 
 async function createWindow() {
   const win = new BrowserWindow({
