@@ -1,10 +1,13 @@
+import { execFile } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CommandValidator } from "../../src/main/services/command-validator";
 
 let tempDir: string;
+const execFileAsync = promisify(execFile);
 
 beforeEach(async () => {
   tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "agent-hub-command-"));
@@ -92,17 +95,28 @@ describe("CommandValidator", () => {
     const file = path.join(tempDir, "claude");
     await fs.writeFile(
       file,
-      '#!/bin/sh\nif [ "$1" = "--version" ]; then while :; do :; done; fi\n',
+      [
+        "#!/bin/sh",
+        "while :; do",
+        "  sleep 1",
+        "done",
+        "",
+      ].join("\n"),
       "utf8",
     );
     await fs.chmod(file, 0o755);
-    const validator = new CommandValidator(undefined, { timeoutMs: 20 });
+    const validator = new CommandValidator(undefined, {
+      timeoutMs: 200,
+      timeoutKillMs: 500,
+    });
 
     await expect(validator.validate(file)).resolves.toMatchObject({
       ok: false,
       code: "version_failed",
       detail: "Command timed out",
     });
+    const { stdout } = await execFileAsync("ps", ["-axo", "command"]);
+    expect(stdout).not.toContain(`${file} --version`);
   });
 
   it("caps command output diagnostics", async () => {

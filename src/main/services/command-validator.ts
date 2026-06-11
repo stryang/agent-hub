@@ -15,10 +15,12 @@ type CommandRunner = (
 
 type CommandValidatorOptions = {
   timeoutMs?: number;
+  timeoutKillMs?: number;
   outputLimit?: number;
 };
 
 const DEFAULT_TIMEOUT_MS = 5_000;
+const DEFAULT_TIMEOUT_KILL_MS = 750;
 const DEFAULT_OUTPUT_LIMIT = 8_192;
 
 function appendCapped(output: string, chunk: string, limit: number) {
@@ -34,6 +36,7 @@ function defaultRunner(
   args: string[],
   {
     timeoutMs = DEFAULT_TIMEOUT_MS,
+    timeoutKillMs = DEFAULT_TIMEOUT_KILL_MS,
     outputLimit = DEFAULT_OUTPUT_LIMIT,
   }: CommandValidatorOptions = {},
 ): Promise<CommandResult> {
@@ -41,7 +44,20 @@ function defaultRunner(
     const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "";
     let stderr = "";
+    let timedOut = false;
     let settled = false;
+    let timeout: NodeJS.Timeout | undefined;
+    let escalationTimeout: NodeJS.Timeout | undefined;
+
+    const clearTimers = () => {
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+
+      if (escalationTimeout) {
+        clearTimeout(escalationTimeout);
+      }
+    };
 
     const finish = (result: CommandResult) => {
       if (settled) {
@@ -49,14 +65,17 @@ function defaultRunner(
       }
 
       settled = true;
-      clearTimeout(timeout);
+      clearTimers();
       resolve(result);
     };
 
-    const timeout = setTimeout(() => {
-      stderr = appendCapped("Command timed out", stderr, outputLimit);
-      child.kill();
-      finish({ code: 1, stdout, stderr });
+    timeout = setTimeout(() => {
+      timedOut = true;
+      stderr = appendCapped("", "Command timed out", outputLimit);
+      child.kill("SIGTERM");
+      escalationTimeout = setTimeout(() => {
+        child.kill("SIGKILL");
+      }, timeoutKillMs);
     }, timeoutMs);
 
     child.stdout.setEncoding("utf8");
@@ -75,6 +94,11 @@ function defaultRunner(
       });
     });
     child.on("close", (code) => {
+      if (timedOut) {
+        finish({ code: 1, stdout, stderr });
+        return;
+      }
+
       finish({ code: code ?? 1, stdout, stderr });
     });
   });
