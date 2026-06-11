@@ -32,6 +32,27 @@ describe("AppConfigStore", () => {
     });
   });
 
+  it("rejects malformed config on save", async () => {
+    const store = new AppConfigStore(tempDir);
+    const malformedConfig = null as unknown as Parameters<AppConfigStore["save"]>[0];
+
+    await expect(store.save(malformedConfig)).rejects.toThrow("Agent Hub config has invalid shape");
+  });
+
+  it("creates a nested user data directory when saving", async () => {
+    const nestedDir = path.join(tempDir, "missing", "nested");
+    const store = new AppConfigStore(nestedDir);
+    const config = {
+      commandPath: "/opt/homebrew/bin/claude",
+      defaultWorkingDirectory: "/Users/leo/IdeaProjects/yang/agent-hub",
+    };
+
+    await store.save(config);
+
+    await expect(fs.access(path.join(nestedDir, "config.json"))).resolves.toBeUndefined();
+    await expect(store.get()).resolves.toEqual(config);
+  });
+
   it("throws a clear error for corrupt JSON", async () => {
     await fs.writeFile(path.join(tempDir, "config.json"), "{bad json", "utf8");
     const store = new AppConfigStore(tempDir);
