@@ -1,6 +1,3 @@
-# Local UI export / design scratch files
-agent-hub-export.html
-
 # Dependencies
 node_modules/
 .pnpm-store/
@@ -50,10 +47,6 @@ pnpm-debug.log*
 # TypeScript
 *.tsbuildinfo
 
-# Local agent runtime state
-.claude/*
-!.claude/.gitkeep
-.codex/*
-!.codex/.gitkeep
-.agents/*
-!.agents/.gitkeep
+design
+
+tests
