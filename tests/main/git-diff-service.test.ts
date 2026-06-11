@@ -39,6 +39,26 @@ describe("GitDiffService", () => {
     expect(diff).toContain("+new");
   });
 
+  it("returns null when git diff fails inside a repository", async () => {
+    class FailingDiffService extends GitDiffService {
+      private calls = 0;
+
+      override async run(_command: string, _args: string[], _cwd: string) {
+        this.calls += 1;
+
+        if (this.calls === 1) {
+          return { code: 0, stdout: tempDir, stderr: "" };
+        }
+
+        return { code: 1, stdout: "", stderr: "bad pathspec" };
+      }
+    }
+
+    const service = new FailingDiffService();
+
+    await expect(service.diffFile(tempDir, "README.md")).resolves.toBeNull();
+  });
+
   it("times out commands and waits for process close", async () => {
     const service = new GitDiffService({ timeoutMs: 100, killAfterMs: 100 });
     const started = Date.now();
