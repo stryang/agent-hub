@@ -109,4 +109,95 @@ describe("ClaudeSessionService", () => {
       },
     ]);
   });
+
+  it("skips malformed and non-object JSONL records", async () => {
+    await writeTranscript(
+      "-Users-leo-IdeaProjects-yang-agent-hub",
+      "11111111-1111-4111-8111-111111111111.jsonl",
+      [
+        "{bad json",
+        "null",
+        "[]",
+        '"string"',
+        '{"type":"summary","summary":"重构 CLI 切换模块"}',
+        '{"sessionId":"11111111-1111-4111-8111-111111111111","cwd":"/Users/leo/IdeaProjects/yang/agent-hub","timestamp":"2026-06-11T08:00:00.000Z","type":"user","message":{"role":"user","content":"重构 CLI 切换模块"}}',
+      ].join("\n"),
+    );
+
+    const service = new ClaudeSessionService(tempDir);
+
+    await expect(service.listSessions()).resolves.toEqual([
+      {
+        projectPath: "/Users/leo/IdeaProjects/yang/agent-hub",
+        projectName: "agent-hub",
+        lastModified: Date.parse("2026-06-11T08:00:00.000Z"),
+        sessions: [
+          expect.objectContaining({
+            id: "11111111-1111-4111-8111-111111111111",
+            title: "重构 CLI 切换模块",
+            messageCount: 1,
+          }),
+        ],
+      },
+    ]);
+  });
+
+  it("uses finite event timestamps for invalid transcript timestamps", async () => {
+    await writeTranscript(
+      "-Users-leo-IdeaProjects-yang-agent-hub",
+      "11111111-1111-4111-8111-111111111111.jsonl",
+      [
+        '{"type":"summary","summary":"重构 CLI 切换模块"}',
+        '{"sessionId":"11111111-1111-4111-8111-111111111111","cwd":"/Users/leo/IdeaProjects/yang/agent-hub","timestamp":"not-a-date","type":"user","message":{"role":"user","content":"重构 CLI 切换模块"}}',
+        '{"sessionId":"11111111-1111-4111-8111-111111111111","cwd":"/Users/leo/IdeaProjects/yang/agent-hub","timestamp":"also-bad","type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"我会先读取相关文件。"}]}}',
+      ].join("\n"),
+    );
+
+    const service = new ClaudeSessionService(tempDir);
+    const preview = await service.loadSession(
+      "11111111-1111-4111-8111-111111111111",
+    );
+
+    expect(preview.session.lastModified).toBe(0);
+    expect(preview.events).toEqual([
+      {
+        type: "user_message",
+        text: "重构 CLI 切换模块",
+        timestamp: 0,
+      },
+      {
+        type: "assistant_message",
+        text: "我会先读取相关文件。",
+        timestamp: 0,
+      },
+    ]);
+    expect(
+      preview.events.every((event) => Number.isFinite(event.timestamp)),
+    ).toBe(true);
+  });
+
+  it("skips bad transcripts without aborting listSessions", async () => {
+    await writeTranscript(
+      "-Users-leo-IdeaProjects-yang-agent-hub",
+      "bad.jsonl",
+      ["{bad json", "null", "[]"].join("\n"),
+    );
+    await writeTranscript(
+      "-Users-leo-IdeaProjects-yang-agent-hub",
+      "11111111-1111-4111-8111-111111111111.jsonl",
+      [
+        '{"type":"summary","summary":"重构 CLI 切换模块"}',
+        '{"sessionId":"11111111-1111-4111-8111-111111111111","cwd":"/Users/leo/IdeaProjects/yang/agent-hub","timestamp":"2026-06-11T08:00:00.000Z","type":"user","message":{"role":"user","content":"重构 CLI 切换模块"}}',
+      ].join("\n"),
+    );
+
+    const service = new ClaudeSessionService(tempDir);
+    const groups = await service.listSessions();
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0]?.sessions).toHaveLength(1);
+    expect(groups[0]?.sessions[0]?.id).toBe(
+      "11111111-1111-4111-8111-111111111111",
+    );
+  });
 });

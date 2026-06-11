@@ -57,3 +57,45 @@ describe("normalizeClaudeCommandPath", () => {
     });
   });
 });
+
+describe("normalizeClaudeSessionId", () => {
+  it("rejects non-string session ids", async () => {
+    const { normalizeClaudeSessionId } = await import(
+      "../../src/main/ipc/claude-ipc"
+    );
+
+    expect(() => normalizeClaudeSessionId(null)).toThrow(
+      "Invalid Claude session id.",
+    );
+  });
+
+  it("rejects empty session ids after trimming", async () => {
+    const { normalizeClaudeSessionId } = await import(
+      "../../src/main/ipc/claude-ipc"
+    );
+
+    expect(() => normalizeClaudeSessionId("   ")).toThrow(
+      "Invalid Claude session id.",
+    );
+  });
+
+  it("rejects too-long session ids", async () => {
+    const { normalizeClaudeSessionId } = await import(
+      "../../src/main/ipc/claude-ipc"
+    );
+
+    expect(() => normalizeClaudeSessionId("x".repeat(4_097))).toThrow(
+      "Invalid Claude session id.",
+    );
+  });
+
+  it("trims valid session ids", async () => {
+    const { normalizeClaudeSessionId } = await import(
+      "../../src/main/ipc/claude-ipc"
+    );
+
+    expect(
+      normalizeClaudeSessionId("  11111111-1111-4111-8111-111111111111  "),
+    ).toBe("11111111-1111-4111-8111-111111111111");
+  });
+});

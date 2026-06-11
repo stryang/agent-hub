@@ -13,6 +13,10 @@ type TranscriptMeta = {
   events: AgentUiEvent[];
 };
 
+type ReadTranscriptOptions = {
+  includeEvents: boolean;
+};
+
 type TranscriptMessage = {
   role?: string;
   content?: unknown;
@@ -57,14 +61,26 @@ export class ClaudeSessionService {
   }
 
   async loadSession(sessionId: string): Promise<SessionPreview> {
+    const transcriptPath = await this.findTranscriptPathByFileName(sessionId);
+    if (transcriptPath) {
+      const meta = await this.readTranscript(transcriptPath, {
+        includeEvents: true,
+      });
+      if (meta) return meta;
+      throw new Error(`Claude session not found: ${sessionId}`);
+    }
+
     const metas = await this.readAllTranscripts();
     const meta = metas.find((item) => item.session.id === sessionId);
     if (!meta) throw new Error(`Claude session not found: ${sessionId}`);
 
-    return {
-      session: meta.session,
-      events: meta.events,
-    };
+    if (!meta.session.transcriptPath) return meta;
+    const preview = await this.readTranscript(meta.session.transcriptPath, {
+      includeEvents: true,
+    });
+    if (!preview) throw new Error(`Claude session not found: ${sessionId}`);
+
+    return preview;
   }
 
   private async readAllTranscripts(): Promise<TranscriptMeta[]> {
@@ -73,22 +89,34 @@ export class ClaudeSessionService {
 
     try {
       projectDirs = await fs.readdir(projectsDir);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
-      throw error;
+    } catch {
+      return [];
     }
 
     const metas: TranscriptMeta[] = [];
 
     for (const projectDir of projectDirs) {
       const fullProjectDir = path.join(projectsDir, projectDir);
-      const stat = await fs.stat(fullProjectDir);
+      let stat;
+      try {
+        stat = await fs.stat(fullProjectDir);
+      } catch {
+        continue;
+      }
       if (!stat.isDirectory()) continue;
 
-      const files = await fs.readdir(fullProjectDir);
+      let files: string[];
+      try {
+        files = await fs.readdir(fullProjectDir);
+      } catch {
+        continue;
+      }
+
       for (const file of files.filter((name) => name.endsWith(".jsonl"))) {
         const transcriptPath = path.join(fullProjectDir, file);
-        const meta = await this.readTranscript(transcriptPath);
+        const meta = await this.tryReadTranscript(transcriptPath, {
+          includeEvents: false,
+        });
         if (meta) metas.push(meta);
       }
     }
@@ -96,8 +124,58 @@ export class ClaudeSessionService {
     return metas;
   }
 
+  private async findTranscriptPathByFileName(
+    sessionId: string,
+  ): Promise<string | null> {
+    const projectsDir = path.join(this.claudeConfigDir, "projects");
+    let projectDirs: string[];
+
+    try {
+      projectDirs = await fs.readdir(projectsDir);
+    } catch {
+      return null;
+    }
+
+    const transcriptFile = `${sessionId}.jsonl`;
+    for (const projectDir of projectDirs) {
+      const fullProjectDir = path.join(projectsDir, projectDir);
+      let stat;
+      try {
+        stat = await fs.stat(fullProjectDir);
+      } catch {
+        continue;
+      }
+      if (!stat.isDirectory()) continue;
+
+      let files: string[];
+      try {
+        files = await fs.readdir(fullProjectDir);
+      } catch {
+        continue;
+      }
+
+      if (files.includes(transcriptFile)) {
+        return path.join(fullProjectDir, transcriptFile);
+      }
+    }
+
+    return null;
+  }
+
+  private async tryReadTranscript(
+    transcriptPath: string,
+    options: ReadTranscriptOptions,
+  ): Promise<TranscriptMeta | null> {
+    try {
+      return await this.readTranscript(transcriptPath, options);
+    } catch {
+      return null;
+    }
+  }
+
   private async readTranscript(
     transcriptPath: string,
+    options: ReadTranscriptOptions,
   ): Promise<TranscriptMeta | null> {
     const raw = await fs.readFile(transcriptPath, "utf8");
     const lines = raw.split(/\r?\n/).filter((line) => line.trim().length > 0);
@@ -106,10 +184,13 @@ export class ClaudeSessionService {
     let projectPath = "";
     let lastModified = 0;
     let messageCount = 0;
+    let firstUserText = "";
     const events: AgentUiEvent[] = [];
 
     for (const line of lines) {
-      const record = JSON.parse(line) as Record<string, unknown>;
+      const record = parseJsonObject(line);
+      if (!record) continue;
+
       if (typeof record.summary === "string" && !summary) {
         summary = record.summary;
       }
@@ -118,7 +199,10 @@ export class ClaudeSessionService {
 
       const timestamp =
         typeof record.timestamp === "string" ? Date.parse(record.timestamp) : 0;
-      if (timestamp) lastModified = Math.max(lastModified, timestamp);
+      const finiteTimestamp = Number.isFinite(timestamp) ? timestamp : 0;
+      if (Number.isFinite(timestamp)) {
+        lastModified = Math.max(lastModified, timestamp);
+      }
 
       const message = record.message as TranscriptMessage | undefined;
       if (!message?.role) continue;
@@ -126,12 +210,21 @@ export class ClaudeSessionService {
 
       if (message.role === "user") {
         const text = extractUserText(message.content);
-        events.push({ type: "user_message", text, timestamp });
+        if (!firstUserText) firstUserText = text;
+        if (options.includeEvents) {
+          events.push({ type: "user_message", text, timestamp: finiteTimestamp });
+        }
       }
 
       if (message.role === "assistant") {
         const text = extractAssistantText(message.content);
-        if (text) events.push({ type: "assistant_message", text, timestamp });
+        if (text && options.includeEvents) {
+          events.push({
+            type: "assistant_message",
+            text,
+            timestamp: finiteTimestamp,
+          });
+        }
       }
     }
 
@@ -142,7 +235,7 @@ export class ClaudeSessionService {
     return {
       session: {
         id: sessionId,
-        title: summary || firstUserText(events) || "Untitled Session",
+        title: summary || firstUserText || "Untitled Session",
         projectPath,
         projectName,
         lastModified,
@@ -152,6 +245,21 @@ export class ClaudeSessionService {
       events,
     };
   }
+}
+
+function parseJsonObject(line: string): Record<string, unknown> | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(line);
+  } catch {
+    return null;
+  }
+
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return null;
+  }
+
+  return parsed as Record<string, unknown>;
 }
 
 function extractUserText(content: unknown): string {
@@ -186,9 +294,4 @@ function extractAssistantText(content: unknown): string {
     )
     .filter(Boolean)
     .join("\n");
-}
-
-function firstUserText(events: AgentUiEvent[]): string {
-  const first = events.find((event) => event.type === "user_message");
-  return first?.type === "user_message" ? first.text : "";
 }
