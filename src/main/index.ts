@@ -11,11 +11,14 @@ import { CommandValidator } from "./services/command-validator.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = process.env.NODE_ENV === "development";
 
-registerConfigIpc(new AppConfigStore(app.getPath("userData")));
+const configStore = new AppConfigStore(app.getPath("userData"));
+const claudeCodeAdapter = new ClaudeCodeAdapter({ commandPath: "claude" });
+
+registerConfigIpc(configStore, claudeCodeAdapter);
 registerClaudeIpc(
   new CommandValidator(),
   new ClaudeSessionService(),
-  new ClaudeCodeAdapter({ commandPath: "claude" }),
+  claudeCodeAdapter,
 );
 
 async function createWindow() {
@@ -41,7 +44,21 @@ async function createWindow() {
   }
 }
 
-app.whenReady().then(createWindow);
+async function initializeClaudeCommandPath() {
+  try {
+    const savedConfig = await configStore.get();
+    if (savedConfig) {
+      claudeCodeAdapter.setCommandPath(savedConfig.commandPath);
+    }
+  } catch (error) {
+    console.warn("Unable to load saved Agent Hub config.", error);
+  }
+}
+
+app.whenReady().then(async () => {
+  await initializeClaudeCommandPath();
+  await createWindow();
+});
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();

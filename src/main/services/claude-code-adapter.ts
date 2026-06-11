@@ -67,7 +67,7 @@ interface ClaudeContentBlock {
 }
 
 export class ClaudeCodeAdapter {
-  private readonly commandPath: string;
+  private commandPath: string;
   private readonly spawnProcess: SpawnClaudeProcess;
   private readonly stdoutBufferLimit: number;
   private readonly rawOutputLimit: number;
@@ -86,6 +86,14 @@ export class ClaudeCodeAdapter {
     this.rawOutputLimit = options.rawOutputLimit ?? DEFAULT_RAW_OUTPUT_LIMIT;
     this.sigtermDelayMs = options.sigtermDelayMs ?? DEFAULT_SIGTERM_DELAY_MS;
     this.sigkillDelayMs = options.sigkillDelayMs ?? DEFAULT_SIGKILL_DELAY_MS;
+  }
+
+  setCommandPath(commandPath: string): void {
+    this.commandPath = commandPath;
+  }
+
+  getCommandPath(): string {
+    return this.commandPath;
   }
 
   runPrompt(input: PromptInput, emit: EmitAgentEvent): { runId: string } {
