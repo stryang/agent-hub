@@ -73,8 +73,9 @@ export function App() {
       : config?.defaultWorkingDirectory) ??
     "~";
 
-  const needsConfig =
-    activeAgent === "codex" ? codexConfig === null : config === null;
+  // Only Claude Code being unconfigured blocks the UI entirely.
+  // Codex is optional — the user can always close its settings and switch back.
+  const needsConfig = config === null;
 
   const activeCommandPath =
     activeAgent === "codex" ? codexConfig?.commandPath : config?.commandPath;
@@ -162,7 +163,10 @@ export function App() {
 
           <footer className="input-area">
             <Composer
-              disabled={needsConfig || status === "running"}
+              disabled={
+                (activeAgent === "codex" ? codexConfig === null : config === null) ||
+                status === "running"
+              }
               statusBar={
                 <StatusBar
                   status={status}
@@ -199,7 +203,11 @@ export function App() {
             await saveCodex(nextConfig);
             setSettingsOpen(false);
           }}
-          onClose={needsConfig ? undefined : () => setSettingsOpen(false)}
+          onClose={
+            activeAgent === "codex" || !needsConfig
+              ? () => setSettingsOpen(false)
+              : undefined
+          }
         />
       ) : null}
     </>

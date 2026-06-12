@@ -1,8 +1,74 @@
+import { spawn } from "node:child_process";
 import { BrowserWindow, ipcMain } from "electron";
 import type { CodexAdapter, CodexPromptInput } from "../services/codex-adapter.js";
 import type { AppConfigStore } from "../services/app-config-store.js";
-import type { CommandValidator } from "../services/command-validator.js";
+import { resolveClaudeCommandPath } from "../services/claude-command-resolver.js";
 import type { CodexValidationResult } from "../../shared/types/codex-config.js";
+
+const VALIDATE_TIMEOUT_MS = 5_000;
+const VALIDATE_KILL_MS = 750;
+const VALIDATE_OUTPUT_LIMIT = 8_192;
+
+async function validateCodexCommand(commandPath: string): Promise<CodexValidationResult> {
+  const resolution = await resolveClaudeCommandPath(commandPath);
+  if (!resolution.ok) {
+    return { ok: false, commandPath: resolution.commandPath, code: resolution.code, message: resolution.message, detail: resolution.detail };
+  }
+
+  const executablePath = resolution.commandPath;
+  const result = await runWithTimeout(executablePath, ["--version"]);
+
+  if (result.code !== 0) {
+    return {
+      ok: false,
+      commandPath: executablePath,
+      code: "version_failed",
+      message: "Codex version check failed.",
+      detail: result.stderr || result.stdout || `Exited with code ${result.code}.`,
+    };
+  }
+
+  return { ok: true, commandPath: executablePath, version: result.stdout.trim() || result.stderr.trim() || "unknown" };
+}
+
+function runWithTimeout(command: string, args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
+  return new Promise((resolve) => {
+    let child;
+    try {
+      child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"] });
+    } catch (err) {
+      resolve({ code: 1, stdout: "", stderr: err instanceof Error ? err.message : String(err) });
+      return;
+    }
+
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+    let timedOut = false;
+
+    const finish = (result: { code: number; stdout: string; stderr: string }) => {
+      if (settled) return;
+      settled = true;
+      resolve(result);
+    };
+
+    const killTimer = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGTERM");
+      setTimeout(() => child.kill("SIGKILL"), VALIDATE_KILL_MS);
+    }, VALIDATE_TIMEOUT_MS);
+
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk: string) => { stdout = (stdout + chunk).slice(0, VALIDATE_OUTPUT_LIMIT); });
+    child.stderr.on("data", (chunk: string) => { stderr = (stderr + chunk).slice(0, VALIDATE_OUTPUT_LIMIT); });
+    child.on("error", (err) => finish({ code: 1, stdout, stderr: err.message }));
+    child.on("close", (code) => {
+      clearTimeout(killTimer);
+      finish({ code: timedOut ? 1 : (code ?? 1), stdout, stderr });
+    });
+  });
+}
 
 const MAX_COMMAND_PATH_LENGTH = 4_096;
 const MAX_PROMPT_LENGTH = 200_000;
@@ -58,13 +124,12 @@ function normalizeRunId(runId: unknown): string {
 
 export function registerCodexIpc(
   configStore: AppConfigStore,
-  commandValidator: CommandValidator,
   codexAdapter: CodexAdapter,
 ) {
   ipcMain.handle("codex:validate", (_event, commandPath: unknown) => {
     const normalized = normalizeCodexCommandPath(commandPath);
     if (!normalized.ok) return normalized;
-    return commandValidator.validate(normalized.commandPath);
+    return validateCodexCommand(normalized.commandPath);
   });
 
   ipcMain.handle("codex:config:get", () => configStore.getCodex());

@@ -25,7 +25,7 @@ registerClaudeIpc(
   new ClaudeSessionService(),
   claudeCodeAdapter,
 );
-registerCodexIpc(configStore, new CommandValidator(), codexAdapter);
+registerCodexIpc(configStore, codexAdapter);
 registerRuntimeIpc(new RuntimeStatusService());
 
 async function createWindow() {
