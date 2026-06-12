@@ -33,6 +33,9 @@ const api: AgentHubApi = {
     ipcRenderer.invoke("codex:config:save", config),
   validateCodex: (commandPath: string) =>
     ipcRenderer.invoke("codex:validate", commandPath),
+  listCodexSessions: () => ipcRenderer.invoke("codex:sessions:list"),
+  loadCodexSession: (sessionId: string) =>
+    ipcRenderer.invoke("codex:sessions:load", sessionId),
   sendCodexPrompt: (input) => ipcRenderer.invoke("codex:prompt", input),
   cancelCodexRun: (runId: string) => ipcRenderer.invoke("codex:cancel", runId),
   onCodexEvent: (callback: (event: AgentUiEvent) => void) => {

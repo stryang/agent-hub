@@ -3,6 +3,7 @@ import { BrowserWindow, ipcMain } from "electron";
 import type { CodexAdapter, CodexPromptInput } from "../services/codex-adapter.js";
 import type { AppConfigStore } from "../services/app-config-store.js";
 import { resolveClaudeCommandPath } from "../services/claude-command-resolver.js";
+import type { CodexSessionService } from "../services/codex-session-service.js";
 import type { CodexValidationResult } from "../../shared/types/codex-config.js";
 
 const VALIDATE_TIMEOUT_MS = 5_000;
@@ -122,8 +123,20 @@ function normalizeRunId(runId: unknown): string {
   return trimmed;
 }
 
+const MAX_SESSION_ID_LENGTH = 4_096;
+
+function normalizeSessionId(sessionId: unknown): string {
+  if (typeof sessionId !== "string") throw new Error("Invalid Codex session id.");
+  const trimmed = sessionId.trim();
+  if (trimmed.length === 0 || trimmed.length > MAX_SESSION_ID_LENGTH) {
+    throw new Error("Invalid Codex session id.");
+  }
+  return trimmed;
+}
+
 export function registerCodexIpc(
   configStore: AppConfigStore,
+  sessionService: CodexSessionService,
   codexAdapter: CodexAdapter,
 ) {
   ipcMain.handle("codex:validate", (_event, commandPath: unknown) => {
@@ -131,6 +144,11 @@ export function registerCodexIpc(
     if (!normalized.ok) return normalized;
     return validateCodexCommand(normalized.commandPath);
   });
+
+  ipcMain.handle("codex:sessions:list", () => sessionService.listSessions());
+  ipcMain.handle("codex:sessions:load", (_event, sessionId: unknown) =>
+    sessionService.loadSession(normalizeSessionId(sessionId)),
+  );
 
   ipcMain.handle("codex:config:get", () => configStore.getCodex());
   ipcMain.handle("codex:config:save", async (_event, config) => {

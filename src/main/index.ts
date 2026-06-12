@@ -9,6 +9,7 @@ import { AppConfigStore } from "./services/app-config-store.js";
 import { ClaudeCodeAdapter } from "./services/claude-code-adapter.js";
 import { ClaudeSessionService } from "./services/claude-session-service.js";
 import { CodexAdapter } from "./services/codex-adapter.js";
+import { CodexSessionService } from "./services/codex-session-service.js";
 import { CommandValidator } from "./services/command-validator.js";
 import { RuntimeStatusService } from "./services/runtime-status-service.js";
 
@@ -25,7 +26,7 @@ registerClaudeIpc(
   new ClaudeSessionService(),
   claudeCodeAdapter,
 );
-registerCodexIpc(configStore, codexAdapter);
+registerCodexIpc(configStore, new CodexSessionService(), codexAdapter);
 registerRuntimeIpc(new RuntimeStatusService());
 
 async function createWindow() {

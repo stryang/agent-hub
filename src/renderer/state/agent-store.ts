@@ -27,18 +27,24 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
 
   setActiveAgent(agent) {
     set({ activeAgent: agent, events: [], sessions: [], selectedSessionId: undefined, runId: undefined, status: "idle" });
-    if (agent === "claude-code") {
-      void getAgentHubApi().listSessions().then((sessions) => set({ sessions })).catch(() => undefined);
-    }
+    void get().loadSessions();
   },
 
   async loadSessions() {
-    const sessions = await getAgentHubApi().listSessions();
+    const { activeAgent } = get();
+    const api = getAgentHubApi();
+    const sessions = await (activeAgent === "codex"
+      ? api.listCodexSessions()
+      : api.listSessions());
     set({ sessions });
   },
 
   async selectSession(sessionId) {
-    const preview = await getAgentHubApi().loadSession(sessionId);
+    const { activeAgent } = get();
+    const api = getAgentHubApi();
+    const preview = await (activeAgent === "codex"
+      ? api.loadCodexSession(sessionId)
+      : api.loadSession(sessionId));
     set({
       selectedSessionId: preview.session.id,
       events: preview.events,
