@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { registerClaudeIpc } from "./ipc/claude-ipc.js";
 import { registerCodexIpc } from "./ipc/codex-ipc.js";
 import { registerConfigIpc } from "./ipc/config-ipc.js";
+import { registerHermesIpc } from "./ipc/hermes-ipc.js";
 import { registerRuntimeIpc } from "./ipc/runtime-ipc.js";
 import { AppConfigStore } from "./services/app-config-store.js";
 import { ClaudeCodeAdapter } from "./services/claude-code-adapter.js";
@@ -11,6 +12,8 @@ import { ClaudeSessionService } from "./services/claude-session-service.js";
 import { CodexAdapter } from "./services/codex-adapter.js";
 import { CodexSessionService } from "./services/codex-session-service.js";
 import { CommandValidator } from "./services/command-validator.js";
+import { HermesAdapter } from "./services/hermes-adapter.js";
+import { HermesSessionService } from "./services/hermes-session-service.js";
 import { RuntimeStatusService } from "./services/runtime-status-service.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -19,6 +22,7 @@ const isDev = process.env.NODE_ENV === "development";
 const configStore = new AppConfigStore(app.getPath("userData"));
 const claudeCodeAdapter = new ClaudeCodeAdapter({ commandPath: "claude" });
 const codexAdapter = new CodexAdapter({ commandPath: "codex" });
+const hermesAdapter = new HermesAdapter({ commandPath: "hermes" });
 
 registerConfigIpc(configStore, claudeCodeAdapter);
 registerClaudeIpc(
@@ -27,6 +31,7 @@ registerClaudeIpc(
   claudeCodeAdapter,
 );
 registerCodexIpc(configStore, new CodexSessionService(), codexAdapter);
+registerHermesIpc(configStore, new HermesSessionService(), hermesAdapter);
 registerRuntimeIpc(new RuntimeStatusService());
 
 async function createWindow() {
@@ -106,6 +111,15 @@ async function initializeCommandPaths() {
     }
   } catch (error) {
     console.warn("Unable to load saved Codex config.", error);
+  }
+
+  try {
+    const hermesConfig = await configStore.getHermes();
+    if (hermesConfig) {
+      hermesAdapter.setCommandPath(hermesConfig.commandPath);
+    }
+  } catch (error) {
+    console.warn("Unable to load saved Hermes config.", error);
   }
 }
 

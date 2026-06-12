@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from "electron";
 import type { AgentUiEvent } from "../shared/types/agent-events.js";
 import type { ClaudeConfig } from "../shared/types/claude-config.js";
 import type { CodexConfig } from "../shared/types/codex-config.js";
+import type { HermesConfig } from "../shared/types/hermes-config.js";
 import type { AgentHubApi } from "./global.js";
 
 const api: AgentHubApi = {
@@ -45,6 +46,26 @@ const api: AgentHubApi = {
     ) => callback(payload);
     ipcRenderer.on("codex:event", listener);
     return () => ipcRenderer.removeListener("codex:event", listener);
+  },
+
+  // Hermes
+  getHermesConfig: () => ipcRenderer.invoke("hermes:config:get"),
+  saveHermesConfig: (config: HermesConfig) =>
+    ipcRenderer.invoke("hermes:config:save", config),
+  validateHermes: (commandPath: string) =>
+    ipcRenderer.invoke("hermes:validate", commandPath),
+  listHermesSessions: () => ipcRenderer.invoke("hermes:sessions:list"),
+  loadHermesSession: (sessionId: string) =>
+    ipcRenderer.invoke("hermes:sessions:load", sessionId),
+  sendHermesPrompt: (input) => ipcRenderer.invoke("hermes:prompt", input),
+  cancelHermesRun: (runId: string) => ipcRenderer.invoke("hermes:cancel", runId),
+  onHermesEvent: (callback: (event: AgentUiEvent) => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      payload: AgentUiEvent,
+    ) => callback(payload);
+    ipcRenderer.on("hermes:event", listener);
+    return () => ipcRenderer.removeListener("hermes:event", listener);
   },
 };
 

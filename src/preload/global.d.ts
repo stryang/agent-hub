@@ -8,6 +8,10 @@ import type {
   CodexValidationResult,
 } from "../shared/types/codex-config.js";
 import type {
+  HermesConfig,
+  HermesValidationResult,
+} from "../shared/types/hermes-config.js";
+import type {
   ClaudeSessionGroup,
   SessionPreview,
 } from "../shared/types/sessions.js";
@@ -40,6 +44,20 @@ export type AgentHubApi = {
   sendCodexPrompt(input: { prompt: string; cwd?: string }): Promise<{ runId: string }>;
   cancelCodexRun(runId: string): Promise<void>;
   onCodexEvent(callback: (event: AgentUiEvent) => void): () => void;
+
+  // Hermes
+  getHermesConfig(): Promise<HermesConfig | null>;
+  saveHermesConfig(config: HermesConfig): Promise<HermesConfig>;
+  validateHermes(commandPath: string): Promise<HermesValidationResult>;
+  listHermesSessions(): Promise<ClaudeSessionGroup[]>;
+  loadHermesSession(sessionId: string): Promise<SessionPreview>;
+  sendHermesPrompt(input: {
+    prompt: string;
+    sessionId?: string;
+    cwd?: string;
+  }): Promise<{ runId: string }>;
+  cancelHermesRun(runId: string): Promise<void>;
+  onHermesEvent(callback: (event: AgentUiEvent) => void): () => void;
 };
 
 declare global {

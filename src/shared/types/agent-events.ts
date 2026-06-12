@@ -1,4 +1,4 @@
-export type AgentKind = "claude-code" | "codex";
+export type AgentKind = "claude-code" | "codex" | "hermes";
 
 export type ToolKind = "read" | "edit" | "write" | "bash" | "unknown";
 

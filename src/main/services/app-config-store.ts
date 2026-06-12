@@ -2,11 +2,16 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import type { ClaudeConfig } from "../../shared/types/claude-config.js";
 import type { CodexConfig } from "../../shared/types/codex-config.js";
+import type { HermesConfig } from "../../shared/types/hermes-config.js";
 
 type StoredConfig = {
   commandPath: string;
   defaultWorkingDirectory: string;
   codex?: {
+    commandPath: string;
+    defaultWorkingDirectory: string;
+  };
+  hermes?: {
     commandPath: string;
     defaultWorkingDirectory: string;
   };
@@ -42,6 +47,21 @@ function parseStoredConfig(value: unknown): StoredConfig {
     result.codex = {
       commandPath: codex.commandPath as string,
       defaultWorkingDirectory: codex.defaultWorkingDirectory as string,
+    };
+  }
+
+  if (
+    raw.hermes &&
+    typeof raw.hermes === "object" &&
+    "commandPath" in raw.hermes &&
+    "defaultWorkingDirectory" in raw.hermes &&
+    typeof (raw.hermes as Record<string, unknown>).commandPath === "string" &&
+    typeof (raw.hermes as Record<string, unknown>).defaultWorkingDirectory === "string"
+  ) {
+    const hermes = raw.hermes as Record<string, unknown>;
+    result.hermes = {
+      commandPath: hermes.commandPath as string,
+      defaultWorkingDirectory: hermes.defaultWorkingDirectory as string,
     };
   }
 
@@ -94,6 +114,7 @@ export class AppConfigStore {
       commandPath: config.commandPath,
       defaultWorkingDirectory: config.defaultWorkingDirectory,
       ...(stored?.codex ? { codex: stored.codex } : {}),
+      ...(stored?.hermes ? { hermes: stored.hermes } : {}),
     };
     await this.writeStored(next);
     return { commandPath: next.commandPath, defaultWorkingDirectory: next.defaultWorkingDirectory };
@@ -111,8 +132,27 @@ export class AppConfigStore {
       commandPath: stored?.commandPath ?? "",
       defaultWorkingDirectory: stored?.defaultWorkingDirectory ?? "",
       codex: { commandPath: config.commandPath, defaultWorkingDirectory: config.defaultWorkingDirectory },
+      ...(stored?.hermes ? { hermes: stored.hermes } : {}),
     };
     await this.writeStored(next);
     return next.codex!;
+  }
+
+  async getHermes(): Promise<HermesConfig | null> {
+    const stored = await this.readStored();
+    if (!stored?.hermes) return null;
+    return stored.hermes;
+  }
+
+  async saveHermes(config: HermesConfig): Promise<HermesConfig> {
+    const stored = await this.readStored().catch(() => null);
+    const next: StoredConfig = {
+      commandPath: stored?.commandPath ?? "",
+      defaultWorkingDirectory: stored?.defaultWorkingDirectory ?? "",
+      ...(stored?.codex ? { codex: stored.codex } : {}),
+      hermes: { commandPath: config.commandPath, defaultWorkingDirectory: config.defaultWorkingDirectory },
+    };
+    await this.writeStored(next);
+    return next.hermes!;
   }
 }

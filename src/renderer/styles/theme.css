@@ -10,6 +10,12 @@
   --accent-text: #01438a;
 }
 
+:root[data-agent="hermes"] {
+  --accent: #9046ff;
+  --accent-dim: #f2ebff;
+  --accent-text: #5a1fa8;
+}
+
 :root {
   --bg: transparent;
   --surface: #ffffff;

@@ -7,6 +7,10 @@ import type {
   CodexConfig,
   CodexValidationResult,
 } from "../../shared/types/codex-config";
+import type {
+  HermesConfig,
+  HermesValidationResult,
+} from "../../shared/types/hermes-config";
 import { getAgentHubApi } from "./agent-hub-api";
 
 type ConfigStore = {
@@ -14,6 +18,8 @@ type ConfigStore = {
   validation: ClaudeValidationResult | null;
   codexConfig: CodexConfig | null;
   codexValidation: CodexValidationResult | null;
+  hermesConfig: HermesConfig | null;
+  hermesValidation: HermesValidationResult | null;
   loading: boolean;
   loadConfig: () => Promise<void>;
   validate: (commandPath: string) => Promise<ClaudeValidationResult>;
@@ -21,6 +27,9 @@ type ConfigStore = {
   loadCodexConfig: () => Promise<void>;
   validateCodex: (commandPath: string) => Promise<CodexValidationResult>;
   saveCodex: (config: CodexConfig) => Promise<CodexConfig>;
+  loadHermesConfig: () => Promise<void>;
+  validateHermes: (commandPath: string) => Promise<HermesValidationResult>;
+  saveHermes: (config: HermesConfig) => Promise<HermesConfig>;
 };
 
 export const useConfigStore = create<ConfigStore>((set) => ({
@@ -28,6 +37,8 @@ export const useConfigStore = create<ConfigStore>((set) => ({
   validation: null,
   codexConfig: null,
   codexValidation: null,
+  hermesConfig: null,
+  hermesValidation: null,
   loading: false,
 
   async loadConfig() {
@@ -66,6 +77,23 @@ export const useConfigStore = create<ConfigStore>((set) => ({
   async saveCodex(config) {
     const savedConfig = await getAgentHubApi().saveCodexConfig(config);
     set({ codexConfig: savedConfig });
+    return savedConfig;
+  },
+
+  async loadHermesConfig() {
+    const hermesConfig = await getAgentHubApi().getHermesConfig();
+    set({ hermesConfig });
+  },
+
+  async validateHermes(commandPath) {
+    const hermesValidation = await getAgentHubApi().validateHermes(commandPath);
+    set({ hermesValidation });
+    return hermesValidation;
+  },
+
+  async saveHermes(config) {
+    const savedConfig = await getAgentHubApi().saveHermesConfig(config);
+    set({ hermesConfig: savedConfig });
     return savedConfig;
   },
 }));

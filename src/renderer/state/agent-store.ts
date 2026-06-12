@@ -33,18 +33,28 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   async loadSessions() {
     const { activeAgent } = get();
     const api = getAgentHubApi();
-    const sessions = await (activeAgent === "codex"
-      ? api.listCodexSessions()
-      : api.listSessions());
+    let sessions;
+    if (activeAgent === "codex") {
+      sessions = await api.listCodexSessions();
+    } else if (activeAgent === "hermes") {
+      sessions = await api.listHermesSessions();
+    } else {
+      sessions = await api.listSessions();
+    }
     set({ sessions });
   },
 
   async selectSession(sessionId) {
     const { activeAgent } = get();
     const api = getAgentHubApi();
-    const preview = await (activeAgent === "codex"
-      ? api.loadCodexSession(sessionId)
-      : api.loadSession(sessionId));
+    let preview;
+    if (activeAgent === "codex") {
+      preview = await api.loadCodexSession(sessionId);
+    } else if (activeAgent === "hermes") {
+      preview = await api.loadHermesSession(sessionId);
+    } else {
+      preview = await api.loadSession(sessionId);
+    }
     set({
       selectedSessionId: preview.session.id,
       events: preview.events,
@@ -74,6 +84,14 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
           cwd: codexConfig?.defaultWorkingDirectory || undefined,
         });
         set({ runId: response.runId, status: "running" });
+      } else if (activeAgent === "hermes") {
+        const hermesConfig = config.hermesConfig;
+        const response = await getAgentHubApi().sendHermesPrompt({
+          prompt: text,
+          sessionId: selectedSessionId,
+          cwd: hermesConfig?.defaultWorkingDirectory || undefined,
+        });
+        set({ runId: response.runId, status: "running" });
       } else {
         const claudeConfig = config.config;
         const response = await getAgentHubApi().sendPrompt({
@@ -84,13 +102,16 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
         set({ runId: response.runId, status: "running" });
       }
     } catch (error) {
+      const agentLabel =
+        activeAgent === "codex" ? "Codex" :
+        activeAgent === "hermes" ? "Hermes" : "Claude Code";
       set((state) => ({
         status: "failed",
         events: [
           ...state.events,
           {
             type: "error",
-            message: `Failed to start ${activeAgent === "codex" ? "Codex" : "Claude Code"}.`,
+            message: `Failed to start ${agentLabel}.`,
             detail: error instanceof Error ? error.message : String(error),
             timestamp: Date.now(),
           },
@@ -105,6 +126,8 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
 
     if (activeAgent === "codex") {
       await getAgentHubApi().cancelCodexRun(runId);
+    } else if (activeAgent === "hermes") {
+      await getAgentHubApi().cancelHermesRun(runId);
     } else {
       await getAgentHubApi().cancelRun(runId);
     }

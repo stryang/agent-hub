@@ -8,6 +8,7 @@ type SidebarProps = {
   activeAgent: AgentKind;
   commandPath?: string;
   codexCommandPath?: string;
+  hermesCommandPath?: string;
   groups: ClaudeSessionGroup[];
   selectedSessionId?: string;
   onSelectAgent: (agent: AgentKind) => void;
@@ -19,6 +20,7 @@ export function Sidebar({
   activeAgent,
   commandPath,
   codexCommandPath,
+  hermesCommandPath,
   groups,
   selectedSessionId,
   onSelectAgent,
@@ -50,6 +52,7 @@ export function Sidebar({
           activeAgent={activeAgent}
           claudeCommandPath={commandPath}
           codexCommandPath={codexCommandPath}
+          hermesCommandPath={hermesCommandPath}
           onSelectAgent={onSelectAgent}
         />
         <div className="section-label projects-label">项目</div>

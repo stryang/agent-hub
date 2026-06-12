@@ -24,7 +24,14 @@ export function App() {
     cancel,
     appendEvent,
   } = useAgentStore();
-  const { config, validation, codexConfig, codexValidation, loadConfig, loadCodexConfig, validate, validateCodex, save, saveCodex } = useConfigStore();
+  const {
+    config, validation,
+    codexConfig, codexValidation,
+    hermesConfig, hermesValidation,
+    loadConfig, loadCodexConfig, loadHermesConfig,
+    validate, validateCodex, validateHermes,
+    save, saveCodex, saveHermes,
+  } = useConfigStore();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus | null>(null);
 
@@ -38,6 +45,7 @@ export function App() {
 
     void loadConfig();
     void loadCodexConfig();
+    void loadHermesConfig();
     void loadSessions();
 
     const unsubscribeClaude = window.agentHub.onAgentEvent((event) => {
@@ -52,11 +60,18 @@ export function App() {
       }
     });
 
+    const unsubscribeHermes = window.agentHub.onHermesEvent((event) => {
+      if (useAgentStore.getState().activeAgent === "hermes") {
+        appendEvent(event);
+      }
+    });
+
     return () => {
       unsubscribeClaude();
       unsubscribeCodex();
+      unsubscribeHermes();
     };
-  }, [appendEvent, loadConfig, loadCodexConfig, loadSessions]);
+  }, [appendEvent, loadConfig, loadCodexConfig, loadHermesConfig, loadSessions]);
 
   const selectedSession = useMemo(() => {
     for (const group of sessions) {
@@ -70,7 +85,9 @@ export function App() {
     selectedSession?.projectPath ??
     (activeAgent === "codex"
       ? codexConfig?.defaultWorkingDirectory
-      : config?.defaultWorkingDirectory) ??
+      : activeAgent === "hermes"
+        ? hermesConfig?.defaultWorkingDirectory
+        : config?.defaultWorkingDirectory) ??
     "~";
 
   // Only Claude Code being unconfigured blocks the UI entirely.
@@ -78,10 +95,18 @@ export function App() {
   const needsConfig = config === null;
 
   const activeCommandPath =
-    activeAgent === "codex" ? codexConfig?.commandPath : config?.commandPath;
+    activeAgent === "codex"
+      ? codexConfig?.commandPath
+      : activeAgent === "hermes"
+        ? hermesConfig?.commandPath
+        : config?.commandPath;
 
   const activeValidation =
-    activeAgent === "codex" ? codexValidation : validation;
+    activeAgent === "codex"
+      ? codexValidation
+      : activeAgent === "hermes"
+        ? hermesValidation
+        : validation;
 
   function handleSelectAgent(agent: AgentKind) {
     setActiveAgent(agent);
@@ -115,6 +140,7 @@ export function App() {
           activeAgent={activeAgent}
           commandPath={config?.commandPath}
           codexCommandPath={codexConfig?.commandPath}
+          hermesCommandPath={hermesConfig?.commandPath}
           groups={sessions}
           selectedSessionId={selectedSessionId}
           onSelectAgent={handleSelectAgent}
@@ -164,13 +190,17 @@ export function App() {
           <footer className="input-area">
             <Composer
               disabled={
-                (activeAgent === "codex" ? codexConfig === null : config === null) ||
+                (activeAgent === "codex"
+                  ? codexConfig === null
+                  : activeAgent === "hermes"
+                    ? hermesConfig === null
+                    : config === null) ||
                 status === "running"
               }
               statusBar={
                 <StatusBar
                   status={status}
-                  config={activeAgent === "codex" ? null : config}
+                  config={activeAgent === "claude-code" ? config : null}
                   validation={activeValidation}
                   runtimeStatus={runtimeStatus}
                   activeAgent={activeAgent}
@@ -188,12 +218,15 @@ export function App() {
       {needsConfig || settingsOpen ? (
         <SettingsDialog
           activeAgent={activeAgent}
-          initialConfig={activeAgent === "codex" ? null : config}
+          initialConfig={activeAgent === "claude-code" ? config : null}
           initialCodexConfig={activeAgent === "codex" ? codexConfig : null}
-          validation={activeAgent === "codex" ? null : validation}
+          initialHermesConfig={activeAgent === "hermes" ? hermesConfig : null}
+          validation={activeAgent === "claude-code" ? validation : null}
           codexValidation={activeAgent === "codex" ? codexValidation : null}
+          hermesValidation={activeAgent === "hermes" ? hermesValidation : null}
           onValidate={validate}
           onValidateCodex={validateCodex}
+          onValidateHermes={validateHermes}
           onSave={async (nextConfig) => {
             await save(nextConfig);
             setSettingsOpen(false);
@@ -203,8 +236,12 @@ export function App() {
             await saveCodex(nextConfig);
             setSettingsOpen(false);
           }}
+          onSaveHermes={async (nextConfig) => {
+            await saveHermes(nextConfig);
+            setSettingsOpen(false);
+          }}
           onClose={
-            activeAgent === "codex" || !needsConfig
+            activeAgent !== "claude-code" || !needsConfig
               ? () => setSettingsOpen(false)
               : undefined
           }

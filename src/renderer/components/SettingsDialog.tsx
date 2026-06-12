@@ -8,17 +8,25 @@ import type {
   CodexConfig,
   CodexValidationResult,
 } from "../../shared/types/codex-config";
+import type {
+  HermesConfig,
+  HermesValidationResult,
+} from "../../shared/types/hermes-config";
 
 type SettingsDialogProps = {
   activeAgent: AgentKind;
   initialConfig: ClaudeConfig | null;
   initialCodexConfig: CodexConfig | null;
+  initialHermesConfig: HermesConfig | null;
   validation: ClaudeValidationResult | null;
   codexValidation: CodexValidationResult | null;
+  hermesValidation: HermesValidationResult | null;
   onValidate: (commandPath: string) => Promise<ClaudeValidationResult>;
   onValidateCodex: (commandPath: string) => Promise<CodexValidationResult>;
+  onValidateHermes: (commandPath: string) => Promise<HermesValidationResult>;
   onSave: (config: ClaudeConfig) => Promise<void>;
   onSaveCodex: (config: CodexConfig) => Promise<void>;
+  onSaveHermes: (config: HermesConfig) => Promise<void>;
   onClose?: () => void;
 };
 
@@ -26,35 +34,46 @@ export function SettingsDialog({
   activeAgent,
   initialConfig,
   initialCodexConfig,
+  initialHermesConfig,
   validation,
   codexValidation,
+  hermesValidation,
   onValidate,
   onValidateCodex,
+  onValidateHermes,
   onSave,
   onSaveCodex,
+  onSaveHermes,
   onClose,
 }: SettingsDialogProps) {
   const isCodex = activeAgent === "codex";
+  const isHermes = activeAgent === "hermes";
 
-  const [commandPath, setCommandPath] = useState(
-    isCodex
-      ? (initialCodexConfig?.commandPath ?? "")
-      : (initialConfig?.commandPath ?? ""),
-  );
-  const [defaultWorkingDirectory, setDefaultWorkingDirectory] = useState(
-    isCodex
-      ? (initialCodexConfig?.defaultWorkingDirectory ?? "")
-      : (initialConfig?.defaultWorkingDirectory ?? ""),
-  );
+  const initialCommandPath = isCodex
+    ? (initialCodexConfig?.commandPath ?? "")
+    : isHermes
+      ? (initialHermesConfig?.commandPath ?? "")
+      : (initialConfig?.commandPath ?? "");
+
+  const initialWorkingDir = isCodex
+    ? (initialCodexConfig?.defaultWorkingDirectory ?? "")
+    : isHermes
+      ? (initialHermesConfig?.defaultWorkingDirectory ?? "")
+      : (initialConfig?.defaultWorkingDirectory ?? "");
+
+  const [commandPath, setCommandPath] = useState(initialCommandPath);
+  const [defaultWorkingDirectory, setDefaultWorkingDirectory] = useState(initialWorkingDir);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const activeValidation = isCodex ? codexValidation : validation;
+  const activeValidation = isCodex ? codexValidation : isHermes ? hermesValidation : validation;
 
   async function handleValidate() {
     setError(null);
     if (isCodex) {
       await onValidateCodex(commandPath);
+    } else if (isHermes) {
+      await onValidateHermes(commandPath);
     } else {
       await onValidate(commandPath);
     }
@@ -73,6 +92,16 @@ export function SettingsDialog({
           return;
         }
         await onSaveCodex({
+          commandPath: result.commandPath,
+          defaultWorkingDirectory: defaultWorkingDirectory.trim(),
+        });
+      } else if (isHermes) {
+        const result = await onValidateHermes(commandPath);
+        if (!result.ok) {
+          setError(formatValidationError(result));
+          return;
+        }
+        await onSaveHermes({
           commandPath: result.commandPath,
           defaultWorkingDirectory: defaultWorkingDirectory.trim(),
         });
@@ -97,10 +126,12 @@ export function SettingsDialog({
     }
   }
 
-  const agentLabel = isCodex ? "Codex" : "Claude Code";
+  const agentLabel = isCodex ? "Codex" : isHermes ? "Hermes" : "Claude Code";
   const commandPlaceholder = isCodex
     ? "/opt/homebrew/bin/codex"
-    : "/opt/homebrew/bin/claude";
+    : isHermes
+      ? "~/.local/bin/hermes"
+      : "/opt/homebrew/bin/claude";
 
   return (
     <div className="settings-shell" role="presentation">
@@ -172,7 +203,7 @@ export function SettingsDialog({
 }
 
 function formatValidationError(
-  result: ClaudeValidationResult | CodexValidationResult,
+  result: ClaudeValidationResult | CodexValidationResult | HermesValidationResult,
 ): string {
   if (result.ok) return "";
   return result.detail ? `${result.message} ${result.detail}` : result.message;

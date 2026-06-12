@@ -5,6 +5,7 @@ import type {
   ClaudeValidationResult,
 } from "../../shared/types/claude-config";
 import type { CodexValidationResult } from "../../shared/types/codex-config";
+import type { HermesValidationResult } from "../../shared/types/hermes-config";
 import type { RuntimeStatus } from "../../shared/types/runtime-status";
 
 type StatusBarProps = {
@@ -12,7 +13,7 @@ type StatusBarProps = {
   activeAgent: AgentKind;
   commandPath?: string;
   config: ClaudeConfig | null;
-  validation: ClaudeValidationResult | CodexValidationResult | null;
+  validation: ClaudeValidationResult | CodexValidationResult | HermesValidationResult | null;
   runtimeStatus: RuntimeStatus | null;
 };
 
@@ -45,7 +46,7 @@ function getModelName(
   activeAgent: AgentKind,
   commandPath: string | undefined,
   config: ClaudeConfig | null,
-  validation: ClaudeValidationResult | CodexValidationResult | null,
+  validation: ClaudeValidationResult | CodexValidationResult | HermesValidationResult | null,
   runtimeStatus: RuntimeStatus | null,
 ) {
   if (activeAgent === "codex") {
@@ -53,6 +54,13 @@ function getModelName(
     if (!validation) return "Codex";
     if (!validation.ok) return validation.code;
     return `Codex ${validation.version}`;
+  }
+
+  if (activeAgent === "hermes") {
+    if (!commandPath) return "not configured";
+    if (!validation) return "Hermes";
+    if (!validation.ok) return validation.code;
+    return `Hermes ${validation.version}`;
   }
 
   if (!config) return "not configured";

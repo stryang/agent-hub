@@ -1,12 +1,13 @@
 import { Copy, Expand, ThumbsDown, ThumbsUp } from "lucide-react";
 import type { AgentKind, AgentUiEvent } from "../../shared/types/agent-events";
-import { ClaudeLogo, CodexLogo } from "./CliSelector";
+import { ClaudeLogo, CodexLogo, HermesLogo } from "./CliSelector";
 import { MarkdownMessage } from "./MarkdownMessage";
 import { ToolCard } from "./ToolCard";
 
 const AGENT_LABELS: Record<AgentKind, string> = {
   "claude-code": "Claude Code",
   codex: "Codex",
+  hermes: "Hermes",
 };
 
 type ThreadProps = {
@@ -24,7 +25,7 @@ export function Thread({ activeAgent, events }: ThreadProps) {
         <div className="empty-thread">
           <div className="agent-name">
             <span className="logo">
-              {activeAgent === "codex" ? <CodexLogo /> : <ClaudeLogo />}
+              {activeAgent === "codex" ? <CodexLogo /> : activeAgent === "hermes" ? <HermesLogo /> : <ClaudeLogo />}
             </span>
             <span className="agent-label-text">{label}</span>
           </div>
@@ -76,7 +77,7 @@ function ThreadEvent({ activeAgent, event }: { activeAgent: AgentKind; event: Ag
       <div className="agent">
         <div className="agent-name">
           <span className="logo">
-            {activeAgent === "codex" ? <CodexLogo /> : <ClaudeLogo />}
+            {activeAgent === "codex" ? <CodexLogo /> : activeAgent === "hermes" ? <HermesLogo /> : <ClaudeLogo />}
           </span>
           <span className="agent-label-text">{label}</span>
         </div>
