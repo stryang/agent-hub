@@ -1,36 +1,63 @@
 import { type FormEvent, useState } from "react";
+import type { AgentKind } from "../../shared/types/agent-events";
 import type {
   ClaudeConfig,
   ClaudeValidationResult,
 } from "../../shared/types/claude-config";
+import type {
+  CodexConfig,
+  CodexValidationResult,
+} from "../../shared/types/codex-config";
 
 type SettingsDialogProps = {
+  activeAgent: AgentKind;
   initialConfig: ClaudeConfig | null;
+  initialCodexConfig: CodexConfig | null;
   validation: ClaudeValidationResult | null;
+  codexValidation: CodexValidationResult | null;
   onValidate: (commandPath: string) => Promise<ClaudeValidationResult>;
+  onValidateCodex: (commandPath: string) => Promise<CodexValidationResult>;
   onSave: (config: ClaudeConfig) => Promise<void>;
+  onSaveCodex: (config: CodexConfig) => Promise<void>;
   onClose?: () => void;
 };
 
 export function SettingsDialog({
+  activeAgent,
   initialConfig,
+  initialCodexConfig,
   validation,
+  codexValidation,
   onValidate,
+  onValidateCodex,
   onSave,
+  onSaveCodex,
   onClose,
 }: SettingsDialogProps) {
+  const isCodex = activeAgent === "codex";
+
   const [commandPath, setCommandPath] = useState(
-    initialConfig?.commandPath ?? "",
+    isCodex
+      ? (initialCodexConfig?.commandPath ?? "")
+      : (initialConfig?.commandPath ?? ""),
   );
   const [defaultWorkingDirectory, setDefaultWorkingDirectory] = useState(
-    initialConfig?.defaultWorkingDirectory ?? "",
+    isCodex
+      ? (initialCodexConfig?.defaultWorkingDirectory ?? "")
+      : (initialConfig?.defaultWorkingDirectory ?? ""),
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const activeValidation = isCodex ? codexValidation : validation;
+
   async function handleValidate() {
     setError(null);
-    await onValidate(commandPath);
+    if (isCodex) {
+      await onValidateCodex(commandPath);
+    } else {
+      await onValidate(commandPath);
+    }
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -39,16 +66,27 @@ export function SettingsDialog({
     setError(null);
 
     try {
-      const result = await onValidate(commandPath);
-      if (!result.ok) {
-        setError(formatValidationError(result));
-        return;
+      if (isCodex) {
+        const result = await onValidateCodex(commandPath);
+        if (!result.ok) {
+          setError(formatValidationError(result));
+          return;
+        }
+        await onSaveCodex({
+          commandPath: result.commandPath,
+          defaultWorkingDirectory: defaultWorkingDirectory.trim(),
+        });
+      } else {
+        const result = await onValidate(commandPath);
+        if (!result.ok) {
+          setError(formatValidationError(result));
+          return;
+        }
+        await onSave({
+          commandPath: result.commandPath,
+          defaultWorkingDirectory: defaultWorkingDirectory.trim(),
+        });
       }
-
-      await onSave({
-        commandPath: result.commandPath,
-        defaultWorkingDirectory: defaultWorkingDirectory.trim(),
-      });
       onClose?.();
     } catch (saveError) {
       setError(
@@ -59,13 +97,18 @@ export function SettingsDialog({
     }
   }
 
+  const agentLabel = isCodex ? "Codex" : "Claude Code";
+  const commandPlaceholder = isCodex
+    ? "/opt/homebrew/bin/codex"
+    : "/opt/homebrew/bin/claude";
+
   return (
     <div className="settings-shell" role="presentation">
       <form className="settings-dialog" onSubmit={handleSubmit}>
         <div className="settings-head">
           <div>
             <div className="kind">settings</div>
-            <h1>Claude Code 设置</h1>
+            <h1>{agentLabel} 设置</h1>
           </div>
           {onClose ? (
             <button className="icon" type="button" onClick={onClose}>
@@ -78,7 +121,7 @@ export function SettingsDialog({
           <span>commandPath</span>
           <input
             value={commandPath}
-            placeholder="/opt/homebrew/bin/claude"
+            placeholder={commandPlaceholder}
             onChange={(event) => setCommandPath(event.target.value)}
           />
         </label>
@@ -92,11 +135,11 @@ export function SettingsDialog({
           />
         </label>
 
-        {validation ? (
-          <div className={`settings-result ${validation.ok ? "ok" : "bad"}`}>
-            {validation.ok
-              ? `Claude Code ${validation.version} · authenticated`
-              : formatValidationError(validation)}
+        {activeValidation ? (
+          <div className={`settings-result ${activeValidation.ok ? "ok" : "bad"}`}>
+            {activeValidation.ok
+              ? `${agentLabel} ${activeValidation.version} · ready`
+              : formatValidationError(activeValidation)}
           </div>
         ) : null}
         {error ? <div className="settings-result bad">{error}</div> : null}
@@ -128,10 +171,9 @@ export function SettingsDialog({
   );
 }
 
-function formatValidationError(result: ClaudeValidationResult): string {
-  if (result.ok) {
-    return "";
-  }
-
+function formatValidationError(
+  result: ClaudeValidationResult | CodexValidationResult,
+): string {
+  if (result.ok) return "";
   return result.detail ? `${result.message} ${result.detail}` : result.message;
 }

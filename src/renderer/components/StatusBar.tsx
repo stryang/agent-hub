@@ -1,25 +1,30 @@
 import { GitBranch } from "lucide-react";
-import type { RunStatus } from "../../shared/types/agent-events";
+import type { AgentKind, RunStatus } from "../../shared/types/agent-events";
 import type {
   ClaudeConfig,
   ClaudeValidationResult,
 } from "../../shared/types/claude-config";
+import type { CodexValidationResult } from "../../shared/types/codex-config";
 import type { RuntimeStatus } from "../../shared/types/runtime-status";
 
 type StatusBarProps = {
   status: RunStatus;
+  activeAgent: AgentKind;
+  commandPath?: string;
   config: ClaudeConfig | null;
-  validation: ClaudeValidationResult | null;
+  validation: ClaudeValidationResult | CodexValidationResult | null;
   runtimeStatus: RuntimeStatus | null;
 };
 
 export function StatusBar({
   status,
+  activeAgent,
+  commandPath,
   config,
   validation,
   runtimeStatus,
 }: StatusBarProps) {
-  const modelName = getModelName(config, validation, runtimeStatus);
+  const modelName = getModelName(activeAgent, commandPath, config, validation, runtimeStatus);
   const statusText = statusLabel(status);
 
   return (
@@ -31,21 +36,31 @@ export function StatusBar({
           <span>{statusText}</span>
         </>
       ) : null}
-      <GitStatus runtimeStatus={runtimeStatus} configured={Boolean(config)} />
+      <GitStatus runtimeStatus={runtimeStatus} configured={Boolean(config) || Boolean(commandPath)} />
     </div>
   );
 }
 
 function getModelName(
+  activeAgent: AgentKind,
+  commandPath: string | undefined,
   config: ClaudeConfig | null,
-  validation: ClaudeValidationResult | null,
+  validation: ClaudeValidationResult | CodexValidationResult | null,
   runtimeStatus: RuntimeStatus | null,
 ) {
+  if (activeAgent === "codex") {
+    if (!commandPath) return "not configured";
+    if (runtimeStatus?.modelName) return runtimeStatus.modelName;
+    if (!validation) return "Codex";
+    if (!validation.ok) return validation.code;
+    return `Codex ${validation.version}`;
+  }
+
   if (!config) return "not configured";
   if (runtimeStatus?.modelName) return runtimeStatus.modelName;
   if (!validation) return "Claude Code";
   if (!validation.ok) return validation.code;
-  return validation.version.replace(/\s*\(Claude Code\)\s*$/, "");
+  return (validation as ClaudeValidationResult & { ok: true }).version.replace(/\s*\(Claude Code\)\s*$/, "");
 }
 
 function GitStatus({
@@ -56,9 +71,7 @@ function GitStatus({
   configured: boolean;
 }) {
   if (!runtimeStatus) {
-    return configured ? (
-      <strong id="statusBranch">checking</strong>
-    ) : null;
+    return configured ? <strong id="statusBranch">checking</strong> : null;
   }
 
   if (!runtimeStatus.git.available) {

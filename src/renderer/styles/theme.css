@@ -2,6 +2,15 @@
   --accent: #d97757;
   --accent-dim: #fff1eb;
   --accent-text: #8b3d24;
+}
+
+:root[data-agent="codex"] {
+  --accent: #0169cc;
+  --accent-dim: #e8f1fb;
+  --accent-text: #01438a;
+}
+
+:root {
   --bg: transparent;
   --surface: #ffffff;
   --sidebar: rgb(250 250 251 / 5%);

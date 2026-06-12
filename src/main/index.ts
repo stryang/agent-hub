@@ -2,11 +2,13 @@ import { app, BrowserWindow } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { registerClaudeIpc } from "./ipc/claude-ipc.js";
+import { registerCodexIpc } from "./ipc/codex-ipc.js";
 import { registerConfigIpc } from "./ipc/config-ipc.js";
 import { registerRuntimeIpc } from "./ipc/runtime-ipc.js";
 import { AppConfigStore } from "./services/app-config-store.js";
 import { ClaudeCodeAdapter } from "./services/claude-code-adapter.js";
 import { ClaudeSessionService } from "./services/claude-session-service.js";
+import { CodexAdapter } from "./services/codex-adapter.js";
 import { CommandValidator } from "./services/command-validator.js";
 import { RuntimeStatusService } from "./services/runtime-status-service.js";
 
@@ -15,6 +17,7 @@ const isDev = process.env.NODE_ENV === "development";
 
 const configStore = new AppConfigStore(app.getPath("userData"));
 const claudeCodeAdapter = new ClaudeCodeAdapter({ commandPath: "claude" });
+const codexAdapter = new CodexAdapter({ commandPath: "codex" });
 
 registerConfigIpc(configStore, claudeCodeAdapter);
 registerClaudeIpc(
@@ -22,6 +25,7 @@ registerClaudeIpc(
   new ClaudeSessionService(),
   claudeCodeAdapter,
 );
+registerCodexIpc(configStore, new CommandValidator(), codexAdapter);
 registerRuntimeIpc(new RuntimeStatusService());
 
 async function createWindow() {
@@ -84,19 +88,28 @@ async function createWindow() {
   }
 }
 
-async function initializeClaudeCommandPath() {
+async function initializeCommandPaths() {
   try {
-    const savedConfig = await configStore.get();
-    if (savedConfig) {
-      claudeCodeAdapter.setCommandPath(savedConfig.commandPath);
+    const claudeConfig = await configStore.get();
+    if (claudeConfig) {
+      claudeCodeAdapter.setCommandPath(claudeConfig.commandPath);
     }
   } catch (error) {
-    console.warn("Unable to load saved Agent Hub config.", error);
+    console.warn("Unable to load saved Claude config.", error);
+  }
+
+  try {
+    const codexConfig = await configStore.getCodex();
+    if (codexConfig) {
+      codexAdapter.setCommandPath(codexConfig.commandPath);
+    }
+  } catch (error) {
+    console.warn("Unable to load saved Codex config.", error);
   }
 }
 
 app.whenReady().then(async () => {
-  await initializeClaudeCommandPath();
+  await initializeCommandPaths();
   await createWindow();
 });
 

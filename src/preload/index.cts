@@ -1,10 +1,13 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { AgentUiEvent } from "../shared/types/agent-events.js";
 import type { ClaudeConfig } from "../shared/types/claude-config.js";
+import type { CodexConfig } from "../shared/types/codex-config.js";
 import type { AgentHubApi } from "./global.js";
 
 const api: AgentHubApi = {
   version: "0.1.0",
+
+  // Claude Code
   getConfig: () => ipcRenderer.invoke("config:get"),
   saveConfig: (config: ClaudeConfig) => ipcRenderer.invoke("config:save", config),
   validateClaude: (commandPath: string) =>
@@ -22,6 +25,23 @@ const api: AgentHubApi = {
     ) => callback(payload);
     ipcRenderer.on("agent:event", listener);
     return () => ipcRenderer.removeListener("agent:event", listener);
+  },
+
+  // Codex
+  getCodexConfig: () => ipcRenderer.invoke("codex:config:get"),
+  saveCodexConfig: (config: CodexConfig) =>
+    ipcRenderer.invoke("codex:config:save", config),
+  validateCodex: (commandPath: string) =>
+    ipcRenderer.invoke("codex:validate", commandPath),
+  sendCodexPrompt: (input) => ipcRenderer.invoke("codex:prompt", input),
+  cancelCodexRun: (runId: string) => ipcRenderer.invoke("codex:cancel", runId),
+  onCodexEvent: (callback: (event: AgentUiEvent) => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      payload: AgentUiEvent,
+    ) => callback(payload);
+    ipcRenderer.on("codex:event", listener);
+    return () => ipcRenderer.removeListener("codex:event", listener);
   },
 };
 

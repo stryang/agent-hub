@@ -1,20 +1,27 @@
 import { useMemo, useState } from "react";
 import { FolderClosed, FolderOpen, Settings } from "lucide-react";
+import type { AgentKind } from "../../shared/types/agent-events";
 import type { ClaudeSessionGroup } from "../../shared/types/sessions";
 import { CliSelector } from "./CliSelector";
 
 type SidebarProps = {
+  activeAgent: AgentKind;
   commandPath?: string;
+  codexCommandPath?: string;
   groups: ClaudeSessionGroup[];
   selectedSessionId?: string;
+  onSelectAgent: (agent: AgentKind) => void;
   onSelectSession: (sessionId: string) => void;
   onOpenSettings: () => void;
 };
 
 export function Sidebar({
+  activeAgent,
   commandPath,
+  codexCommandPath,
   groups,
   selectedSessionId,
+  onSelectAgent,
   onSelectSession,
   onOpenSettings,
 }: SidebarProps) {
@@ -39,7 +46,12 @@ export function Sidebar({
       <div className="side-head" />
 
       <div className="sidebar-fixed">
-        <CliSelector commandPath={commandPath} />
+        <CliSelector
+          activeAgent={activeAgent}
+          claudeCommandPath={commandPath}
+          codexCommandPath={codexCommandPath}
+          onSelectAgent={onSelectAgent}
+        />
         <div className="section-label projects-label">项目</div>
       </div>
 

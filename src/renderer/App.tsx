@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { LayoutList, PanelRight, Play, Square } from "lucide-react";
+import type { AgentKind } from "../shared/types/agent-events";
 import type { RuntimeStatus } from "../shared/types/runtime-status";
 import { Composer } from "./components/Composer";
 import { SettingsDialog } from "./components/SettingsDialog";
@@ -11,32 +12,51 @@ import { useConfigStore } from "./state/config-store";
 
 export function App() {
   const {
+    activeAgent,
     events,
     sessions,
     selectedSessionId,
     status,
+    setActiveAgent,
     loadSessions,
     selectSession,
     sendPrompt,
     cancel,
     appendEvent,
   } = useAgentStore();
-  const { config, validation, loadConfig, validate, save } = useConfigStore();
+  const { config, validation, codexConfig, codexValidation, loadConfig, loadCodexConfig, validate, validateCodex, save, saveCodex } = useConfigStore();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus | null>(null);
+
+  // Sync agent theme token on root element
+  useEffect(() => {
+    document.documentElement.dataset.agent = activeAgent;
+  }, [activeAgent]);
 
   useEffect(() => {
     if (!("agentHub" in window)) return;
 
     void loadConfig();
+    void loadCodexConfig();
     void loadSessions();
 
-    const unsubscribe = window.agentHub.onAgentEvent((event) => {
-      appendEvent(event);
+    const unsubscribeClaude = window.agentHub.onAgentEvent((event) => {
+      if (useAgentStore.getState().activeAgent === "claude-code") {
+        appendEvent(event);
+      }
     });
 
-    return unsubscribe;
-  }, [appendEvent, loadConfig, loadSessions]);
+    const unsubscribeCodex = window.agentHub.onCodexEvent((event) => {
+      if (useAgentStore.getState().activeAgent === "codex") {
+        appendEvent(event);
+      }
+    });
+
+    return () => {
+      unsubscribeClaude();
+      unsubscribeCodex();
+    };
+  }, [appendEvent, loadConfig, loadCodexConfig, loadSessions]);
 
   const selectedSession = useMemo(() => {
     for (const group of sessions) {
@@ -47,8 +67,24 @@ export function App() {
   }, [selectedSessionId, sessions]);
 
   const projectPath =
-    selectedSession?.projectPath ?? config?.defaultWorkingDirectory ?? "~";
-  const needsConfig = config === null;
+    selectedSession?.projectPath ??
+    (activeAgent === "codex"
+      ? codexConfig?.defaultWorkingDirectory
+      : config?.defaultWorkingDirectory) ??
+    "~";
+
+  const needsConfig =
+    activeAgent === "codex" ? codexConfig === null : config === null;
+
+  const activeCommandPath =
+    activeAgent === "codex" ? codexConfig?.commandPath : config?.commandPath;
+
+  const activeValidation =
+    activeAgent === "codex" ? codexValidation : validation;
+
+  function handleSelectAgent(agent: AgentKind) {
+    setActiveAgent(agent);
+  }
 
   useEffect(() => {
     if (!("agentHub" in window) || projectPath === "~") {
@@ -75,9 +111,12 @@ export function App() {
     <>
       <div className="app">
         <Sidebar
+          activeAgent={activeAgent}
           commandPath={config?.commandPath}
+          codexCommandPath={codexConfig?.commandPath}
           groups={sessions}
           selectedSessionId={selectedSessionId}
+          onSelectAgent={handleSelectAgent}
           onSelectSession={(sessionId) => {
             void selectSession(sessionId);
           }}
@@ -127,9 +166,11 @@ export function App() {
               statusBar={
                 <StatusBar
                   status={status}
-                  config={config}
-                  validation={validation}
+                  config={activeAgent === "codex" ? null : config}
+                  validation={activeValidation}
                   runtimeStatus={runtimeStatus}
+                  activeAgent={activeAgent}
+                  commandPath={activeCommandPath}
                 />
               }
               onSubmit={(prompt) => {
@@ -142,13 +183,21 @@ export function App() {
 
       {needsConfig || settingsOpen ? (
         <SettingsDialog
-          initialConfig={config}
-          validation={validation}
+          activeAgent={activeAgent}
+          initialConfig={activeAgent === "codex" ? null : config}
+          initialCodexConfig={activeAgent === "codex" ? codexConfig : null}
+          validation={activeAgent === "codex" ? null : validation}
+          codexValidation={activeAgent === "codex" ? codexValidation : null}
           onValidate={validate}
+          onValidateCodex={validateCodex}
           onSave={async (nextConfig) => {
             await save(nextConfig);
             setSettingsOpen(false);
             await loadSessions();
+          }}
+          onSaveCodex={async (nextConfig) => {
+            await saveCodex(nextConfig);
+            setSettingsOpen(false);
           }}
           onClose={needsConfig ? undefined : () => setSettingsOpen(false)}
         />

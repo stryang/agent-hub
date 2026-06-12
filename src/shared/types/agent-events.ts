@@ -1,3 +1,5 @@
+export type AgentKind = "claude-code" | "codex";
+
 export type ToolKind = "read" | "edit" | "write" | "bash" | "unknown";
 
 export type ToolStatus = "success" | "failed" | "cancelled";
