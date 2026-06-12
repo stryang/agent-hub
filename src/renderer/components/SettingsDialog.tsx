@@ -41,7 +41,7 @@ export function SettingsDialog({
     try {
       const result = await onValidate(commandPath);
       if (!result.ok) {
-        setError(result.message);
+        setError(formatValidationError(result));
         return;
       }
 
@@ -96,7 +96,7 @@ export function SettingsDialog({
           <div className={`settings-result ${validation.ok ? "ok" : "bad"}`}>
             {validation.ok
               ? `Claude Code ${validation.version} · authenticated`
-              : validation.message}
+              : formatValidationError(validation)}
           </div>
         ) : null}
         {error ? <div className="settings-result bad">{error}</div> : null}
@@ -126,4 +126,12 @@ export function SettingsDialog({
       </form>
     </div>
   );
+}
+
+function formatValidationError(result: ClaudeValidationResult): string {
+  if (result.ok) {
+    return "";
+  }
+
+  return result.detail ? `${result.message} ${result.detail}` : result.message;
 }

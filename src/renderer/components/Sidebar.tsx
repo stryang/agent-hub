@@ -1,4 +1,6 @@
+import { useMemo, useState } from "react";
 import type { ClaudeSessionGroup } from "../../shared/types/sessions";
+import { AgentHubMark } from "./AgentHubLogo";
 import { CliSelector } from "./CliSelector";
 
 type SidebarProps = {
@@ -16,16 +18,26 @@ export function Sidebar({
   onSelectSession,
   onOpenSettings,
 }: SidebarProps) {
+  const defaultOpenProjects = useMemo(() => new Set<string>(), [groups]);
+  const [openProjects, setOpenProjects] = useState(defaultOpenProjects);
+
+  function toggleProject(projectPath: string) {
+    setOpenProjects((current) => {
+      const next = new Set(current);
+      if (next.has(projectPath)) {
+        next.delete(projectPath);
+      } else {
+        next.add(projectPath);
+      }
+      return next;
+    });
+  }
+
   return (
     <aside className="sidebar">
       <div className="side-head">
         <div className="mark">
-          <svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true">
-            <rect x="2" y="2" width="4" height="4" rx="1" fill="#fff" opacity=".9" />
-            <rect x="8" y="2" width="4" height="4" rx="1" fill="#fff" opacity=".6" />
-            <rect x="2" y="8" width="4" height="4" rx="1" fill="#fff" opacity=".6" />
-            <rect x="8" y="8" width="4" height="4" rx="1" fill="#fff" opacity=".35" />
-          </svg>
+          <AgentHubMark />
         </div>
         <div className="brand">Agent Hub</div>
         <button className="icon" title="新建" type="button">
@@ -54,25 +66,35 @@ export function Sidebar({
         ) : null}
         {groups.map((group) => (
           <div className="proj" key={group.projectPath}>
-            <button className="proj-head" type="button">
+            <button
+              className="proj-head"
+              type="button"
+              aria-expanded={openProjects.has(group.projectPath)}
+              onClick={() => toggleProject(group.projectPath)}
+            >
+              <span className="twisty" aria-hidden="true">
+                {openProjects.has(group.projectPath) ? "▾" : "▸"}
+              </span>
               <FolderIcon />
               <span className="proj-name">{group.projectName}</span>
               <span className="count">{group.sessions.length}</span>
             </button>
-            <div className="sess-list">
-              {group.sessions.map((session) => (
-                <button
-                  className={`sess${
-                    session.id === selectedSessionId ? " active" : ""
-                  }`}
-                  key={session.id}
-                  type="button"
-                  onClick={() => onSelectSession(session.id)}
-                >
-                  {session.title}
-                </button>
-              ))}
-            </div>
+            {openProjects.has(group.projectPath) ? (
+              <div className="sess-list">
+                {group.sessions.map((session) => (
+                  <button
+                    className={`sess${
+                      session.id === selectedSessionId ? " active" : ""
+                    }`}
+                    key={session.id}
+                    type="button"
+                    onClick={() => onSelectSession(session.id)}
+                  >
+                    {session.title}
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </div>
         ))}
       </div>

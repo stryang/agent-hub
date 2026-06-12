@@ -185,6 +185,7 @@ export class ClaudeSessionService {
     let lastModified = 0;
     let messageCount = 0;
     let firstUserText = "";
+    let sanitizedSummary = "";
     const events: AgentUiEvent[] = [];
 
     for (const line of lines) {
@@ -193,6 +194,7 @@ export class ClaudeSessionService {
 
       if (typeof record.summary === "string" && !summary) {
         summary = record.summary;
+        sanitizedSummary = sanitizeUserVisibleText(record.summary);
       }
       if (typeof record.sessionId === "string") sessionId = record.sessionId;
       if (typeof record.cwd === "string") projectPath = record.cwd;
@@ -206,18 +208,25 @@ export class ClaudeSessionService {
 
       const message = record.message as TranscriptMessage | undefined;
       if (!message?.role) continue;
-      messageCount += 1;
 
       if (message.role === "user") {
-        const text = extractUserText(message.content);
-        if (!firstUserText) firstUserText = text;
+        const extracted = extractUserTranscriptEvent(record, message.content);
+        if (!extracted) continue;
+
+        messageCount += 1;
+        if (extracted.type === "user_message" && !firstUserText) {
+          firstUserText = extracted.text;
+        }
         if (options.includeEvents) {
-          events.push({ type: "user_message", text, timestamp: finiteTimestamp });
+          events.push({ ...extracted, timestamp: finiteTimestamp });
         }
       }
 
       if (message.role === "assistant") {
         const text = extractAssistantText(message.content);
+        if (!text) continue;
+
+        messageCount += 1;
         if (text && options.includeEvents) {
           events.push({
             type: "assistant_message",
@@ -228,14 +237,14 @@ export class ClaudeSessionService {
       }
     }
 
-    if (!projectPath) return null;
+    if (!projectPath || !firstUserText) return null;
 
     const projectName = path.basename(projectPath);
 
     return {
       session: {
         id: sessionId,
-        title: summary || firstUserText || "Untitled Session",
+        title: sanitizedSummary || firstUserText,
         projectPath,
         projectName,
         lastModified,
@@ -262,9 +271,36 @@ function parseJsonObject(line: string): Record<string, unknown> | null {
   return parsed as Record<string, unknown>;
 }
 
-function extractUserText(content: unknown): string {
+function extractUserTranscriptEvent(
+  record: Record<string, unknown>,
+  content: unknown,
+): AgentUiEvent | null {
+  if (!isUserAuthoredRecord(record)) return null;
+  const text = extractTextContent(content);
+  if (!text) return null;
+
+  const localCommandOutput = extractTaggedContent(text, "local-command-stdout");
+  if (localCommandOutput) {
+    return {
+      type: "raw_output",
+      text: localCommandOutput,
+      timestamp: 0,
+    };
+  }
+
+  const userText = sanitizeUserVisibleText(text);
+  if (!userText) return null;
+
+  return { type: "user_message", text: userText, timestamp: 0 };
+}
+
+function extractTextContent(content: unknown): string {
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return "";
+
+  if (content.some((part) => isRecord(part) && part.type === "tool_result")) {
+    return "";
+  }
 
   return content
     .map((part) =>
@@ -294,4 +330,53 @@ function extractAssistantText(content: unknown): string {
     )
     .filter(Boolean)
     .join("\n");
+}
+
+function isUserAuthoredRecord(record: Record<string, unknown>): boolean {
+  if (record.type !== "user") return false;
+  if (record.isMeta === true) return false;
+  if ("toolUseResult" in record) return false;
+  if (typeof record.sourceToolAssistantUUID === "string") return false;
+  return true;
+}
+
+function sanitizeUserVisibleText(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed) return "";
+
+  if (isInternalUserText(trimmed)) {
+    return "";
+  }
+
+  return stripLocalCommandTags(trimmed).trim();
+}
+
+function isInternalUserText(text: string): boolean {
+  return [
+    "<local-command-caveat>",
+    "<system-reminder>",
+    "<ide-context>",
+    "<tool-result>",
+  ].some((prefix) => text.startsWith(prefix));
+}
+
+function stripLocalCommandTags(text: string): string {
+  return text
+    .replace(/<\/?command-message>/g, "")
+    .replace(/<\/?command-name>/g, "")
+    .replace(/<\/?command-args>/g, "")
+    .replace(/<local-command-stdout>[\s\S]*?<\/local-command-stdout>/g, "");
+}
+
+function extractTaggedContent(text: string, tagName: string): string | null {
+  const escapedTagName = tagName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = text.match(
+    new RegExp(`<${escapedTagName}>([\\s\\S]*?)<\\/${escapedTagName}>`),
+  );
+  const value = match?.[1]?.trim();
+  return value ? value : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

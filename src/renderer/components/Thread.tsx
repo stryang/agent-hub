@@ -1,5 +1,6 @@
 import type { AgentUiEvent } from "../../shared/types/agent-events";
 import { ClaudeLogo } from "./CliSelector";
+import { MarkdownMessage } from "./MarkdownMessage";
 import { ToolCard } from "./ToolCard";
 
 type ThreadProps = {
@@ -48,7 +49,7 @@ function ThreadEvent({ event }: { event: AgentUiEvent }) {
           <span className="agent-label-text">Claude Code</span>
         </div>
         <div className="prose">
-          <p>{event.text}</p>
+          <MarkdownMessage text={event.text} />
         </div>
       </div>
     );

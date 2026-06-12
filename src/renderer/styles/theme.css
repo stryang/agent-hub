@@ -3,23 +3,23 @@
   --accent-dim: #fff1eb;
   --accent-text: #8b3d24;
   --bg: #f9f9fb;
-  --surface: #fff;
+  --surface: #ffffff;
   --sidebar: #f4f4f7;
   --hover: #ebebef;
   --active: #e3e3e9;
-  --fg: #111118;
+  --fg: #0d0d0d;
   --fg2: #44444e;
   --fg3: #7f7f8e;
   --border: #e0e0e8;
   --border2: #ebebf0;
-  --green: #23bd5a;
+  --green: #00a240;
   --diff: #0d1117;
   --add: #091a10;
   --del: #200b0b;
-  --red: #f97583;
+  --red: #e02e2a;
   --sh: 0 8px 22px rgb(17 17 24 / 7%);
-  --mono: "SF Mono", "JetBrains Mono", ui-monospace, Menlo, monospace;
-  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  --mono: "SF Mono", ui-monospace, Menlo, Monaco, monospace;
+  --font: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
 }
 
 * {

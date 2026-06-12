@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ClaudeLogo } from "./components/CliSelector";
+import type { RuntimeStatus } from "../shared/types/runtime-status";
 import { Composer } from "./components/Composer";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { Sidebar } from "./components/Sidebar";
@@ -22,6 +22,7 @@ export function App() {
   } = useAgentStore();
   const { config, validation, loadConfig, validate, save } = useConfigStore();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus | null>(null);
 
   useEffect(() => {
     if (!("agentHub" in window)) return;
@@ -50,6 +51,27 @@ export function App() {
     selectedSession?.projectName ?? lastPathSegment(projectPath) ?? "agent-hub";
   const needsConfig = config === null;
 
+  useEffect(() => {
+    if (!("agentHub" in window) || projectPath === "~") {
+      setRuntimeStatus(null);
+      return;
+    }
+
+    let cancelled = false;
+    window.agentHub
+      .getRuntimeStatus(projectPath)
+      .then((nextStatus) => {
+        if (!cancelled) setRuntimeStatus(nextStatus);
+      })
+      .catch(() => {
+        if (!cancelled) setRuntimeStatus(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [projectPath, status]);
+
   return (
     <>
       <div className="app">
@@ -65,20 +87,25 @@ export function App() {
 
         <main className="main">
           <header className="top">
-            <span className="path">
-              {parentPath(projectPath)}
-              <strong>{projectName}</strong>
-            </span>
-            <span className="sep" />
-            <div className="pill">
-              <span className="logo" id="pillLogo">
-                <ClaudeLogo />
-              </span>
-              <span id="pillName">Claude Code</span>
-            </div>
-            <button className="icon" type="button" aria-label="菜单">
-              ☰
+            <button className="nav-btn" type="button" aria-label="上一页">
+              ‹
             </button>
+            <button className="nav-btn" type="button" aria-label="下一页">
+              ›
+            </button>
+            <div className="title-stack">
+              <div className="conversation-title">
+                {selectedSession?.title ?? "新对话"}
+              </div>
+              <div className="conversation-subtitle">
+                {parentPath(projectPath)}
+                <strong>{projectName}</strong>
+              </div>
+            </div>
+            <button className="title-more" type="button" aria-label="更多">
+              ···
+            </button>
+            <span className="top-spacer" />
             <button
               className="icon"
               type="button"
@@ -98,7 +125,9 @@ export function App() {
           <footer className="input-area">
             <StatusBar
               status={status}
-              branch={selectedSession?.gitBranch ?? "main · clean"}
+              config={config}
+              validation={validation}
+              runtimeStatus={runtimeStatus}
             />
             <Composer
               disabled={needsConfig || status === "running"}

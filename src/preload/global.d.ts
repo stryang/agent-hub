@@ -7,6 +7,7 @@ import type {
   ClaudeSessionGroup,
   SessionPreview,
 } from "../shared/types/sessions.js";
+import type { RuntimeStatus } from "../shared/types/runtime-status.js";
 
 export type AgentHubApi = {
   version: string;
@@ -15,6 +16,7 @@ export type AgentHubApi = {
   validateClaude(commandPath: string): Promise<ClaudeValidationResult>;
   listSessions(): Promise<ClaudeSessionGroup[]>;
   loadSession(sessionId: string): Promise<SessionPreview>;
+  getRuntimeStatus(cwd: string): Promise<RuntimeStatus>;
   sendPrompt(input: {
     prompt: string;
     sessionId?: string;

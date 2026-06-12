@@ -12,6 +12,7 @@ const api: AgentHubApi = {
   listSessions: () => ipcRenderer.invoke("claude:sessions:list"),
   loadSession: (sessionId: string) =>
     ipcRenderer.invoke("claude:sessions:load", sessionId),
+  getRuntimeStatus: (cwd: string) => ipcRenderer.invoke("runtime:status", cwd),
   sendPrompt: (input) => ipcRenderer.invoke("claude:prompt", input),
   cancelRun: (runId: string) => ipcRenderer.invoke("claude:cancel", runId),
   onAgentEvent: (callback: (event: AgentUiEvent) => void) => {

@@ -3,10 +3,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { registerClaudeIpc } from "./ipc/claude-ipc.js";
 import { registerConfigIpc } from "./ipc/config-ipc.js";
+import { registerRuntimeIpc } from "./ipc/runtime-ipc.js";
 import { AppConfigStore } from "./services/app-config-store.js";
 import { ClaudeCodeAdapter } from "./services/claude-code-adapter.js";
 import { ClaudeSessionService } from "./services/claude-session-service.js";
 import { CommandValidator } from "./services/command-validator.js";
+import { RuntimeStatusService } from "./services/runtime-status-service.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = process.env.NODE_ENV === "development";
@@ -20,6 +22,7 @@ registerClaudeIpc(
   new ClaudeSessionService(),
   claudeCodeAdapter,
 );
+registerRuntimeIpc(new RuntimeStatusService());
 
 async function createWindow() {
   const win = new BrowserWindow({
@@ -28,8 +31,10 @@ async function createWindow() {
     minWidth: 920,
     minHeight: 640,
     title: "Agent Hub",
+    titleBarStyle: "hiddenInset",
+    trafficLightPosition: { x: 18, y: 16 },
     webPreferences: {
-      preload: path.join(__dirname, "../preload/index.js"),
+      preload: path.join(__dirname, "../preload/index.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,

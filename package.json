@@ -6,10 +6,11 @@
   "main": "dist/main/index.js",
   "scripts": {
     "predev": "rimraf dist/main dist/preload",
-    "dev": "concurrently -k -n main,renderer,electron -c cyan,green,magenta \"tsc -p tsconfig.node.json --watch --preserveWatchOutput\" \"vite --host 127.0.0.1\" \"wait-on tcp:127.0.0.1:5173 dist/main/index.js dist/preload/index.js && cross-env NODE_ENV=development electron .\"",
+    "dev": "concurrently -k -n main,renderer,electron -c cyan,green,magenta \"tsc -p tsconfig.node.json --watch --preserveWatchOutput\" \"vite --host 127.0.0.1\" \"wait-on tcp:127.0.0.1:5173 dist/main/index.js dist/preload/index.cjs && cross-env NODE_ENV=development electron .\"",
     "clean": "rimraf dist",
     "build": "npm run clean && tsc -p tsconfig.json && tsc -p tsconfig.node.json && vite build",
     "build:main": "tsc -p tsconfig.node.json",
+    "dist:mac": "npm run build && electron-builder --mac --arm64 --dir",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.node.json --noEmit"
@@ -29,11 +30,36 @@
     "concurrently": "^10.0.3",
     "cross-env": "^10.1.0",
     "electron": "^42.4.0",
+    "electron-builder": "^26.15.2",
     "jsdom": "^29.1.1",
     "rimraf": "^6.1.0",
     "typescript": "^6.0.3",
     "vite": "^8.0.16",
     "vitest": "^4.1.8",
     "wait-on": "^9.0.10"
+  },
+  "build": {
+    "appId": "com.stryang.agenthub",
+    "productName": "Agent Hub",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "target": [
+        {
+          "target": "dir",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "category": "public.app-category.developer-tools",
+      "identity": null
+    }
   }
 }
