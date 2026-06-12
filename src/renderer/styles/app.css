@@ -453,6 +453,10 @@
   gap: 8px;
 }
 
+.agent-name .logo {
+  color: var(--fg2);
+}
+
 .prose {
   color: var(--fg);
   font-size: 14px;
@@ -837,6 +841,7 @@ textarea::placeholder {
 
 .mode-btn {
   align-items: center;
+  background: var(--accent-dim);
   border-radius: 9px;
   color: var(--accent);
   display: inline-flex;
@@ -848,7 +853,7 @@ textarea::placeholder {
 }
 
 .mode-btn:hover {
-  background: var(--accent-dim);
+  filter: brightness(0.96);
 }
 
 .mode-shield {

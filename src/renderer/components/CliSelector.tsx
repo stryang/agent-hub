@@ -61,7 +61,7 @@ export function CodexLogo() {
 export function HermesLogo() {
   return (
     <svg
-      fill="#9046FF"
+      fill="currentColor"
       fillRule="evenodd"
       height="1em"
       style={{ flex: "none", lineHeight: 1 }}
