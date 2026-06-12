@@ -50,7 +50,6 @@ function getModelName(
 ) {
   if (activeAgent === "codex") {
     if (!commandPath) return "not configured";
-    if (runtimeStatus?.modelName) return runtimeStatus.modelName;
     if (!validation) return "Codex";
     if (!validation.ok) return validation.code;
     return `Codex ${validation.version}`;

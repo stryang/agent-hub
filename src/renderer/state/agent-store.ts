@@ -26,7 +26,10 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   status: "idle",
 
   setActiveAgent(agent) {
-    set({ activeAgent: agent, events: [], selectedSessionId: undefined, runId: undefined, status: "idle" });
+    set({ activeAgent: agent, events: [], sessions: [], selectedSessionId: undefined, runId: undefined, status: "idle" });
+    if (agent === "claude-code") {
+      void getAgentHubApi().listSessions().then((sessions) => set({ sessions })).catch(() => undefined);
+    }
   },
 
   async loadSessions() {

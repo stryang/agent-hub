@@ -158,7 +158,7 @@ export function App() {
           </header>
 
           <section className="chat">
-            <Thread events={events} />
+            <Thread activeAgent={activeAgent} events={events} />
           </section>
 
           <footer className="input-area">

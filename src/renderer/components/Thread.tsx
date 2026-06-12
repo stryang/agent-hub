@@ -1,15 +1,22 @@
 import { Copy, Expand, ThumbsDown, ThumbsUp } from "lucide-react";
-import type { AgentUiEvent } from "../../shared/types/agent-events";
-import { ClaudeLogo } from "./CliSelector";
+import type { AgentKind, AgentUiEvent } from "../../shared/types/agent-events";
+import { ClaudeLogo, CodexLogo } from "./CliSelector";
 import { MarkdownMessage } from "./MarkdownMessage";
 import { ToolCard } from "./ToolCard";
 
+const AGENT_LABELS: Record<AgentKind, string> = {
+  "claude-code": "Claude Code",
+  codex: "Codex",
+};
+
 type ThreadProps = {
+  activeAgent: AgentKind;
   events: AgentUiEvent[];
 };
 
-export function Thread({ events }: ThreadProps) {
+export function Thread({ activeAgent, events }: ThreadProps) {
   const lastTimestamp = events.at(-1)?.timestamp;
+  const label = AGENT_LABELS[activeAgent];
 
   return (
     <div className="thread">
@@ -17,17 +24,21 @@ export function Thread({ events }: ThreadProps) {
         <div className="empty-thread">
           <div className="agent-name">
             <span className="logo">
-              <ClaudeLogo />
+              {activeAgent === "codex" ? <CodexLogo /> : <ClaudeLogo />}
             </span>
-            <span className="agent-label-text">Claude Code</span>
+            <span className="agent-label-text">{label}</span>
           </div>
           <div className="prose">
-            <p>选择历史会话或给 Claude Code 下达任务。</p>
+            <p>选择历史会话或给 {label} 下达任务。</p>
           </div>
         </div>
       ) : null}
       {events.map((event, index) => (
-        <ThreadEvent event={event} key={`${event.timestamp}:${event.type}:${index}`} />
+        <ThreadEvent
+          activeAgent={activeAgent}
+          event={event}
+          key={`${event.timestamp}:${event.type}:${index}`}
+        />
       ))}
       {lastTimestamp ? (
         <div className="message-actions">
@@ -50,7 +61,7 @@ export function Thread({ events }: ThreadProps) {
   );
 }
 
-function ThreadEvent({ event }: { event: AgentUiEvent }) {
+function ThreadEvent({ activeAgent, event }: { activeAgent: AgentKind; event: AgentUiEvent }) {
   if (event.type === "user_message") {
     return (
       <div className="user">
@@ -60,13 +71,14 @@ function ThreadEvent({ event }: { event: AgentUiEvent }) {
   }
 
   if (event.type === "assistant_message") {
+    const label = AGENT_LABELS[activeAgent];
     return (
       <div className="agent">
         <div className="agent-name">
           <span className="logo">
-            <ClaudeLogo />
+            {activeAgent === "codex" ? <CodexLogo /> : <ClaudeLogo />}
           </span>
-          <span className="agent-label-text">Claude Code</span>
+          <span className="agent-label-text">{label}</span>
         </div>
         <div className="prose">
           <MarkdownMessage text={event.text} />
