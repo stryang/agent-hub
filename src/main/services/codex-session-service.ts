@@ -1,6 +1,8 @@
 import fs from "node:fs/promises";
+import fsSync from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import readline from "node:readline";
 import type { AgentUiEvent } from "../../shared/types/agent-events.js";
 import type {
   ClaudeSession,
@@ -157,27 +159,41 @@ export class CodexSessionService {
 async function readFirstLineMeta(
   filePath: string,
 ): Promise<{ id: string; cwd: string } | null> {
-  let handle: fs.FileHandle | undefined;
-  try {
-    handle = await fs.open(filePath, "r");
-    const buf = Buffer.alloc(8192);
-    const { bytesRead } = await handle.read(buf, 0, 8192, 0);
-    const text = buf.subarray(0, bytesRead).toString("utf8");
-    const firstLine = text.split("\n")[0];
-    const obj = JSON.parse(firstLine);
-    if (
-      obj?.type === "session_meta" &&
-      typeof obj?.payload?.id === "string" &&
-      typeof obj?.payload?.cwd === "string"
-    ) {
-      return { id: obj.payload.id, cwd: obj.payload.cwd };
-    }
-  } catch {
-    // unreadable or unexpected format
-  } finally {
-    await handle?.close();
-  }
-  return null;
+  // The session_meta first line can exceed 8 KB due to base_instructions,
+  // so use readline to read exactly one line without a size limit.
+  return new Promise((resolve) => {
+    const stream = fsSync.createReadStream(filePath, { encoding: "utf8" });
+    const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
+    let resolved = false;
+
+    const finish = (result: { id: string; cwd: string } | null) => {
+      if (resolved) return;
+      resolved = true;
+      rl.close();
+      stream.destroy();
+      resolve(result);
+    };
+
+    rl.once("line", (line) => {
+      try {
+        const obj = JSON.parse(line);
+        if (
+          obj?.type === "session_meta" &&
+          typeof obj?.payload?.id === "string" &&
+          typeof obj?.payload?.cwd === "string"
+        ) {
+          finish({ id: obj.payload.id, cwd: obj.payload.cwd });
+          return;
+        }
+      } catch {
+        // malformed JSON
+      }
+      finish(null);
+    });
+
+    rl.once("close", () => finish(null));
+    stream.once("error", () => finish(null));
+  });
 }
 
 function parseSessionEvents(raw: string): AgentUiEvent[] {
