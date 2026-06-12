@@ -1,3 +1,11 @@
+import {
+  AlertTriangle,
+  CheckCircle2,
+  FilePenLine,
+  FileText,
+  Shield,
+  SquareTerminal,
+} from "lucide-react";
 import type { AgentUiEvent } from "../../shared/types/agent-events";
 import { DiffViewer } from "./DiffViewer";
 
@@ -7,12 +15,31 @@ type ToolCardProps = {
 
 export function ToolCard({ event }: ToolCardProps) {
   if (event.type === "diff") {
+    const stats = diffStats(event.unifiedDiff);
+
     return (
-      <div className="tool">
+      <div className="tool edit-card">
         <div className="tool-head">
-          <span className="kind">edit</span>
-          <span className="target">{event.filePath}</span>
-          <span className="tag">已保存</span>
+          <span className="tool-icon">
+            <FilePenLine aria-hidden="true" />
+          </span>
+          <div className="tool-title">
+            <strong>已编辑 1 个文件</strong>
+            <span>
+              <span className="git-add">+{stats.added}</span>{" "}
+              <span className="git-del">-{stats.deleted}</span>
+            </span>
+          </div>
+          <button className="review-btn" type="button">
+            审核
+          </button>
+        </div>
+        <div className="file-row">
+          <span>{event.filePath}</span>
+          <span>
+            <span className="git-add">+{stats.added}</span>{" "}
+            <span className="git-del">-{stats.deleted}</span>
+          </span>
         </div>
         <DiffViewer unifiedDiff={event.unifiedDiff} />
       </div>
@@ -23,10 +50,13 @@ export function ToolCard({ event }: ToolCardProps) {
     return (
       <div className="tool">
         <div className="tool-head">
-          <span className="kind">{event.tool}</span>
-          <span className="target">
-            {event.target ?? event.command ?? "Claude Code"}
+          <span className="tool-icon">
+            <ToolIcon kind={event.tool} />
           </span>
+          <div className="tool-title">
+            <strong>{labelForTool(event.tool)}</strong>
+            <span>{event.target ?? event.command ?? "Claude Code"}</span>
+          </div>
           <span className="tag">运行中</span>
         </div>
       </div>
@@ -37,10 +67,13 @@ export function ToolCard({ event }: ToolCardProps) {
     return (
       <div className="tool">
         <div className="tool-head">
-          <span className="kind">
-            {event.type === "tool_output" ? "output" : "raw"}
+          <span className="tool-icon">
+            <SquareTerminal aria-hidden="true" />
           </span>
-          <span className="target">Claude Code</span>
+          <div className="tool-title">
+            <strong>{event.type === "tool_output" ? "命令输出" : "Claude 输出"}</strong>
+            <span>Claude Code</span>
+          </div>
           <span className="tag">完成</span>
         </div>
         <div className="tool-body">{event.text}</div>
@@ -52,8 +85,13 @@ export function ToolCard({ event }: ToolCardProps) {
     return (
       <div className="tool">
         <div className="tool-head">
-          <span className="kind">tool</span>
-          <span className="target">Claude Code</span>
+          <span className="tool-icon">
+            <CheckCircle2 aria-hidden="true" />
+          </span>
+          <div className="tool-title">
+            <strong>工具调用</strong>
+            <span>Claude Code</span>
+          </div>
           <span className="tag">{labelForStatus(event.status)}</span>
         </div>
       </div>
@@ -64,8 +102,13 @@ export function ToolCard({ event }: ToolCardProps) {
     return (
       <div className="tool">
         <div className="tool-head">
-          <span className="kind">permission</span>
-          <span className="target">{event.text}</span>
+          <span className="tool-icon">
+            <Shield aria-hidden="true" />
+          </span>
+          <div className="tool-title">
+            <strong>权限请求</strong>
+            <span>{event.text}</span>
+          </div>
           <span className="tag">等待</span>
         </div>
         {event.choices && event.choices.length > 0 ? (
@@ -79,8 +122,13 @@ export function ToolCard({ event }: ToolCardProps) {
     return (
       <div className="tool">
         <div className="tool-head">
-          <span className="kind">error</span>
-          <span className="target">{event.message}</span>
+          <span className="tool-icon error-icon">
+            <AlertTriangle aria-hidden="true" />
+          </span>
+          <div className="tool-title">
+            <strong>错误</strong>
+            <span>{event.message}</span>
+          </div>
           <span className="tag">失败</span>
         </div>
         {event.detail ? <div className="tool-body">{event.detail}</div> : null}
@@ -95,4 +143,33 @@ function labelForStatus(status: "success" | "failed" | "cancelled") {
   if (status === "success") return "完成";
   if (status === "cancelled") return "取消";
   return "失败";
+}
+
+function labelForTool(tool: string) {
+  if (tool === "read") return "读取文件";
+  if (tool === "edit") return "编辑文件";
+  if (tool === "write") return "写入文件";
+  if (tool === "bash") return "运行命令";
+  return "工具调用";
+}
+
+function diffStats(unifiedDiff: string) {
+  let added = 0;
+  let deleted = 0;
+
+  for (const line of unifiedDiff.split("\n")) {
+    if (line.startsWith("+++") || line.startsWith("---")) continue;
+    if (line.startsWith("+")) added += 1;
+    if (line.startsWith("-")) deleted += 1;
+  }
+
+  return { added, deleted };
+}
+
+function ToolIcon({ kind }: { kind: string }) {
+  if (kind === "bash") return <SquareTerminal aria-hidden="true" />;
+  if (kind === "read") {
+    return <FileText aria-hidden="true" />;
+  }
+  return <FilePenLine aria-hidden="true" />;
 }

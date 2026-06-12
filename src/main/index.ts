@@ -32,13 +32,48 @@ async function createWindow() {
     minHeight: 640,
     title: "Agent Hub",
     titleBarStyle: "hiddenInset",
-    trafficLightPosition: { x: 18, y: 16 },
+    trafficLightPosition: { x: 18, y: 17 },
+    transparent: true,
+    backgroundColor: "#00000000",
+    vibrancy: "sidebar",
+    visualEffectState: "active",
     webPreferences: {
       preload: path.join(__dirname, "../preload/index.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
     },
+  });
+
+  win.setBackgroundColor("#00000000");
+  if (process.platform === "darwin") {
+    win.setVibrancy("sidebar");
+    win.setWindowButtonPosition({ x: 18, y: 17 });
+  }
+
+  const repaint = () => {
+    win.webContents.invalidate();
+  };
+  const setDockTransition = (enabled: boolean) => {
+    const action = enabled ? "add" : "remove";
+    void win.webContents
+      .executeJavaScript(
+        `document.documentElement.classList.${action}("dock-transition")`,
+        true,
+      )
+      .catch(() => undefined);
+  };
+  win.on("minimize", () => {
+    setDockTransition(true);
+    repaint();
+  });
+  win.on("restore", () => {
+    repaint();
+    setTimeout(() => setDockTransition(false), 320);
+  });
+  win.on("show", () => {
+    repaint();
+    setTimeout(() => setDockTransition(false), 120);
   });
 
   if (isDev) {

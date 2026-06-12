@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
+import { FolderClosed, FolderOpen, Settings } from "lucide-react";
 import type { ClaudeSessionGroup } from "../../shared/types/sessions";
-import { AgentHubMark } from "./AgentHubLogo";
 import { CliSelector } from "./CliSelector";
 
 type SidebarProps = {
@@ -35,30 +35,19 @@ export function Sidebar({
 
   return (
     <aside className="sidebar">
-      <div className="side-head">
-        <div className="mark">
-          <AgentHubMark />
-        </div>
-        <div className="brand">Agent Hub</div>
-        <button className="icon" title="新建" type="button">
-          <svg viewBox="0 0 13 13" aria-hidden="true">
-            <path
-              d="M6.5 2v9M2 6.5h9"
-              stroke="currentColor"
-              strokeLinecap="round"
-              strokeWidth="1.5"
-            />
-          </svg>
-        </button>
+      <span className="sr-only">Agent Hub</span>
+      <div className="side-head" />
+
+      <div className="sidebar-fixed">
+        <CliSelector commandPath={commandPath} />
+        <div className="section-label projects-label">项目</div>
       </div>
 
-      <CliSelector commandPath={commandPath} />
-
-      <div className="sessions">
+      <div className="project-list">
         {groups.length === 0 ? (
           <div className="proj">
             <button className="proj-head" type="button">
-              <FolderIcon />
+              <FolderClosed className="folder" aria-hidden="true" />
               <span className="proj-name">No Claude history</span>
               <span className="count">0</span>
             </button>
@@ -66,21 +55,27 @@ export function Sidebar({
         ) : null}
         {groups.map((group) => (
           <div className="proj" key={group.projectPath}>
-            <button
-              className="proj-head"
-              type="button"
-              aria-expanded={openProjects.has(group.projectPath)}
-              onClick={() => toggleProject(group.projectPath)}
-            >
-              <span className="twisty" aria-hidden="true">
-                {openProjects.has(group.projectPath) ? "▾" : "▸"}
-              </span>
-              <FolderIcon />
-              <span className="proj-name">{group.projectName}</span>
-              <span className="count">{group.sessions.length}</span>
-            </button>
             {openProjects.has(group.projectPath) ? (
-              <div className="sess-list">
+              <ProjectRow
+                count={group.sessions.length}
+                isOpen={true}
+                name={group.projectName}
+                onClick={() => toggleProject(group.projectPath)}
+              />
+            ) : (
+              <ProjectRow
+                count={group.sessions.length}
+                isOpen={false}
+                name={group.projectName}
+                onClick={() => toggleProject(group.projectPath)}
+              />
+            )}
+            <div
+              className={`sess-list${
+                openProjects.has(group.projectPath) ? " open" : ""
+              }`}
+            >
+              <div className="sess-list-inner">
                 {group.sessions.map((session) => (
                   <button
                     className={`sess${
@@ -94,35 +89,49 @@ export function Sidebar({
                   </button>
                 ))}
               </div>
-            ) : null}
+            </div>
           </div>
         ))}
       </div>
 
       <div className="foot">
-        <div className="avatar">L</div>
-        <span className="foot-name">leo</span>
         <button
-          className="icon"
+          className="settings-entry"
           title="设置"
           type="button"
           onClick={onOpenSettings}
         >
-          ⚙
+          <Settings className="settings-icon" aria-hidden="true" />
+          <span>设置</span>
         </button>
       </div>
     </aside>
   );
 }
 
-function FolderIcon() {
+function ProjectRow({
+  count,
+  isOpen,
+  name,
+  onClick,
+}: {
+  count: number;
+  isOpen: boolean;
+  name: string;
+  onClick: () => void;
+}) {
+  const Icon = isOpen ? FolderOpen : FolderClosed;
+
   return (
-    <svg className="folder" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-      <path
-        d="M1.5 4.2c0-.55.45-1 1-1h3l1 1.2h5c.55 0 1 .45 1 1v5.4c0 .55-.45 1-1 1h-9c-.55 0-1-.45-1-1V4.2z"
-        stroke="currentColor"
-        strokeWidth="1.2"
-      />
-    </svg>
+    <button
+      className="proj-head"
+      type="button"
+      aria-expanded={isOpen}
+      onClick={onClick}
+    >
+      <Icon className="folder" aria-hidden="true" />
+      <span className="proj-name">{name}</span>
+      <span className="count">{count}</span>
+    </button>
   );
 }

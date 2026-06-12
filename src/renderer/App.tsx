@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { LayoutList, PanelRight, Play, Square } from "lucide-react";
 import type { RuntimeStatus } from "../shared/types/runtime-status";
 import { Composer } from "./components/Composer";
 import { SettingsDialog } from "./components/SettingsDialog";
@@ -47,8 +48,6 @@ export function App() {
 
   const projectPath =
     selectedSession?.projectPath ?? config?.defaultWorkingDirectory ?? "~";
-  const projectName =
-    selectedSession?.projectName ?? lastPathSegment(projectPath) ?? "agent-hub";
   const needsConfig = config === null;
 
   useEffect(() => {
@@ -87,34 +86,34 @@ export function App() {
 
         <main className="main">
           <header className="top">
-            <button className="nav-btn" type="button" aria-label="上一页">
-              ‹
-            </button>
-            <button className="nav-btn" type="button" aria-label="下一页">
-              ›
-            </button>
             <div className="title-stack">
               <div className="conversation-title">
                 {selectedSession?.title ?? "新对话"}
-              </div>
-              <div className="conversation-subtitle">
-                {parentPath(projectPath)}
-                <strong>{projectName}</strong>
               </div>
             </div>
             <button className="title-more" type="button" aria-label="更多">
               ···
             </button>
             <span className="top-spacer" />
+            <button className="top-action" type="button" aria-label="视图">
+              <LayoutList aria-hidden="true" />
+            </button>
+            <button className="top-action" type="button" aria-label="面板">
+              <PanelRight aria-hidden="true" />
+            </button>
             <button
-              className="icon"
+              className="top-action"
               type="button"
               aria-label={status === "running" ? "取消" : "运行"}
               onClick={() => {
                 if (status === "running") void cancel();
               }}
             >
-              {status === "running" ? "■" : "▸"}
+              {status === "running" ? (
+                <Square aria-hidden="true" />
+              ) : (
+                <Play aria-hidden="true" />
+              )}
             </button>
           </header>
 
@@ -123,14 +122,16 @@ export function App() {
           </section>
 
           <footer className="input-area">
-            <StatusBar
-              status={status}
-              config={config}
-              validation={validation}
-              runtimeStatus={runtimeStatus}
-            />
             <Composer
               disabled={needsConfig || status === "running"}
+              statusBar={
+                <StatusBar
+                  status={status}
+                  config={config}
+                  validation={validation}
+                  runtimeStatus={runtimeStatus}
+                />
+              }
               onSubmit={(prompt) => {
                 void sendPrompt(prompt);
               }}
@@ -154,17 +155,4 @@ export function App() {
       ) : null}
     </>
   );
-}
-
-function lastPathSegment(path: string) {
-  const normalized = path.replace(/\/+$/, "");
-  const segments = normalized.split("/");
-  return segments.at(-1);
-}
-
-function parentPath(path: string) {
-  const normalized = path.replace(/\/+$/, "");
-  const index = normalized.lastIndexOf("/");
-  if (index < 0) return "";
-  return `${normalized.slice(0, index + 1)}`;
 }

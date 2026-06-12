@@ -2,11 +2,11 @@
   --accent: #d97757;
   --accent-dim: #fff1eb;
   --accent-text: #8b3d24;
-  --bg: #f9f9fb;
+  --bg: transparent;
   --surface: #ffffff;
-  --sidebar: #f4f4f7;
-  --hover: #ebebef;
-  --active: #e3e3e9;
+  --sidebar: rgb(250 250 251 / 5%);
+  --hover: rgb(0 0 0 / 7%);
+  --active: rgb(0 0 0 / 8%);
   --fg: #0d0d0d;
   --fg2: #44444e;
   --fg3: #7f7f8e;
@@ -37,8 +37,9 @@ body,
 body {
   background: var(--bg);
   color: var(--fg);
-  font: 13px/1.5 var(--font);
+  font: 14px/1.5 var(--font);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 button,

@@ -1,3 +1,4 @@
+import { GitBranch } from "lucide-react";
 import type { RunStatus } from "../../shared/types/agent-events";
 import type {
   ClaudeConfig,
@@ -19,23 +20,18 @@ export function StatusBar({
   runtimeStatus,
 }: StatusBarProps) {
   const modelName = getModelName(config, validation, runtimeStatus);
+  const statusText = statusLabel(status);
 
   return (
     <div className="status">
-      <div className="chip accent">
-        <span className="dot" />
-        <span>模型</span>
-        <strong>{modelName}</strong>
-      </div>
-      <div className="chip">
-        <span>状态</span>
-        <strong>{statusLabel(status)}</strong>
-      </div>
-      <span className="spacer" />
-      <div className="chip">
-        <span>git</span>
-        <GitStatus runtimeStatus={runtimeStatus} configured={Boolean(config)} />
-      </div>
+      <span className="status-model">{modelName}</span>
+      {statusText ? (
+        <>
+          <span className="status-dot" />
+          <span>{statusText}</span>
+        </>
+      ) : null}
+      <GitStatus runtimeStatus={runtimeStatus} configured={Boolean(config)} />
     </div>
   );
 }
@@ -60,20 +56,22 @@ function GitStatus({
   configured: boolean;
 }) {
   if (!runtimeStatus) {
-    return <strong id="statusBranch">{configured ? "checking" : "not configured"}</strong>;
+    return configured ? (
+      <strong id="statusBranch">checking</strong>
+    ) : null;
   }
 
   if (!runtimeStatus.git.available) {
-    return <strong id="statusBranch">not a repo</strong>;
+    return null;
   }
 
   const addedFiles = runtimeStatus.git.addedFiles ?? 0;
   const deletedFiles = runtimeStatus.git.deletedFiles ?? 0;
 
   return (
-    <strong className="git-status" id="statusBranch">
+    <span className="git-status" id="statusBranch">
+      <GitBranch className="git-branch-icon" aria-hidden="true" />
       <span>{runtimeStatus.git.branch ?? "detached"}</span>
-      <span className="git-sep">·</span>
       {addedFiles === 0 && deletedFiles === 0 ? (
         <span>clean</span>
       ) : (
@@ -84,7 +82,7 @@ function GitStatus({
           ) : null}
         </>
       )}
-    </strong>
+    </span>
   );
 }
 
@@ -92,5 +90,5 @@ function statusLabel(status: RunStatus) {
   if (status === "running") return "运行中";
   if (status === "failed") return "失败";
   if (status === "cancelled") return "已取消";
-  return "就绪";
+  return "";
 }

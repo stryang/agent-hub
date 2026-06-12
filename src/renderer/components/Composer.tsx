@@ -1,11 +1,13 @@
-import { type KeyboardEvent, useState } from "react";
+import { type KeyboardEvent, type ReactNode, useState } from "react";
+import { ArrowUp, ChevronDown, Plus, ShieldCheck } from "lucide-react";
 
 type ComposerProps = {
   disabled?: boolean;
+  statusBar?: ReactNode;
   onSubmit: (prompt: string) => void;
 };
 
-export function Composer({ disabled = false, onSubmit }: ComposerProps) {
+export function Composer({ disabled = false, statusBar, onSubmit }: ComposerProps) {
   const [prompt, setPrompt] = useState("");
 
   function submit() {
@@ -27,21 +29,25 @@ export function Composer({ disabled = false, onSubmit }: ComposerProps) {
       <textarea
         id="taskInput"
         rows={1}
-        placeholder="给 Claude Code 下达任务…"
+        placeholder="要求后续变更"
         value={prompt}
         disabled={disabled}
         onChange={(event) => setPrompt(event.target.value)}
         onKeyDown={handleKeyDown}
       />
       <div className="bar">
-        <button className="barbtn" type="button" disabled={disabled}>
-          ＋ 添加文件
+        <button className="add-btn" type="button" disabled={disabled} aria-label="添加">
+          <Plus aria-hidden="true" />
         </button>
-        <button className="barbtn" type="button" disabled={disabled}>
-          @引用
+        <button className="mode-btn" type="button" disabled={disabled}>
+          <span className="mode-shield">
+            <ShieldCheck aria-hidden="true" />
+          </span>
+          <span>替我审批</span>
+          <ChevronDown className="chevron" aria-hidden="true" />
         </button>
         <span className="spacer" />
-        <span className="hint">Enter 发送 · Shift+Enter 换行</span>
+        {statusBar}
         <button
           className="run"
           type="button"
@@ -49,7 +55,7 @@ export function Composer({ disabled = false, onSubmit }: ComposerProps) {
           onClick={submit}
           aria-label="发送"
         >
-          ▶
+          <ArrowUp aria-hidden="true" />
         </button>
       </div>
     </div>

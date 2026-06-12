@@ -37,7 +37,6 @@ export function CliSelector({ commandPath }: CliSelectorProps) {
         <span className="cli-name" id="cliBtnName">
           Claude Code
         </span>
-        <span className="caret">▾</span>
       </button>
       <div className="cli-menu" id="cliMenu">
         <button className="cli-opt sel" data-id="claude-code" type="button">
