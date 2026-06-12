@@ -12,8 +12,8 @@
 
 :root[data-agent="hermes"] {
   --accent: #9046ff;
-  --accent-dim: #f2ebff;
-  --accent-text: #5a1fa8;
+  --accent-dim: #f8f3ff;
+  --accent-text: #9046ff;
 }
 
 :root {
