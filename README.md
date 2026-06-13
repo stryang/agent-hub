@@ -20,6 +20,32 @@ The active product design is documented in:
 
 - `docs/superpowers/specs/2026-06-11-agent-hub-claude-code-electron-design.md`
 
+## Development
+
+Install dependencies:
+
+```sh
+npm install
+```
+
+Run verification:
+
+```sh
+npm run lint
+npm test
+npm run build
+```
+
+Start the Electron development app:
+
+```sh
+npm run dev
+```
+
+The first milestone expects Claude Code to be installed and authenticated locally. In app settings, point the Claude command to the full executable path, such as `/opt/homebrew/bin/claude`.
+
 ## Repository Notes
 
 `agent-hub-export.html` is a local design export and is intentionally ignored by git.
+
+`design/` contains local ignored design assets and is not tracked. `tests/` contains local ignored verification files and is not tracked.
