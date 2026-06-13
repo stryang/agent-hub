@@ -3,6 +3,7 @@ import { LayoutList, PanelRight, Play, Square } from "lucide-react";
 import type { AgentKind } from "../shared/types/agent-events";
 import type { RuntimeStatus } from "../shared/types/runtime-status";
 import { Composer } from "./components/Composer";
+import { ModelPicker, CLAUDE_MODELS } from "./components/ModelPicker";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { Sidebar } from "./components/Sidebar";
 import { StatusBar } from "./components/StatusBar";
@@ -17,7 +18,9 @@ export function App() {
     sessions,
     selectedSessionId,
     status,
+    selectedModel,
     setActiveAgent,
+    setSelectedModel,
     loadSessions,
     selectSession,
     sendPrompt,
@@ -89,6 +92,20 @@ export function App() {
         ? hermesConfig?.defaultWorkingDirectory
         : config?.defaultWorkingDirectory) ??
     "~";
+
+  const modelDisplayLabel = useMemo(() => {
+    const rawId = selectedModel ?? selectedSession?.modelName;
+    if (!rawId) return "Sonnet 4.6";
+    const found = CLAUDE_MODELS.find((m) => m.id === rawId);
+    if (found) return found.label;
+    const match = rawId.toLowerCase().match(/^claude-([a-z]+)-(\d+)-(\d+)(?:-([a-z0-9]+))?/);
+    if (!match) return rawId;
+    const family = match[1].charAt(0).toUpperCase() + match[1].slice(1);
+    const suffix = match[4] && /^[a-z]+$/.test(match[4])
+      ? ` ${match[4].charAt(0).toUpperCase() + match[4].slice(1)}`
+      : "";
+    return `${family} ${match[2]}.${match[3]}${suffix}`;
+  }, [selectedModel, selectedSession?.modelName]);
 
   // Only Claude Code being unconfigured blocks the UI entirely.
   // Codex is optional — the user can always close its settings and switch back.
@@ -197,13 +214,20 @@ export function App() {
                     : config === null) ||
                 status === "running"
               }
+              modelPicker={
+                activeAgent === "claude-code" ? (
+                  <ModelPicker
+                    selectedModel={selectedModel}
+                    displayLabel={modelDisplayLabel}
+                    onSelect={setSelectedModel}
+                  />
+                ) : null
+              }
               statusBar={
                 <StatusBar
                   status={status}
                   config={activeAgent === "claude-code" ? config : null}
-                  validation={activeValidation}
                   runtimeStatus={runtimeStatus}
-                  activeAgent={activeAgent}
                   commandPath={activeCommandPath}
                 />
               }

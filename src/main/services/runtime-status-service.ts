@@ -30,7 +30,7 @@ export class RuntimeStatusService {
     const fileStats =
       nameStatus.code === 0
         ? parseGitPorcelainFileStats(nameStatus.stdout)
-        : { addedFiles: 0, deletedFiles: 0 };
+        : { newFiles: 0, modifiedFiles: 0, deletedFiles: 0 };
 
     return {
       cwd: normalizedCwd,
@@ -38,7 +38,8 @@ export class RuntimeStatusService {
       git: {
         available: true,
         branch: branch.stdout.trim() || "detached",
-        addedFiles: fileStats.addedFiles,
+        newFiles: fileStats.newFiles,
+        modifiedFiles: fileStats.modifiedFiles,
         deletedFiles: fileStats.deletedFiles,
       },
     };
@@ -117,36 +118,32 @@ function appendCapped(output: string, chunk: string, limit: number) {
 }
 
 function parseGitPorcelainFileStats(output: string): {
-  addedFiles: number;
+  newFiles: number;
+  modifiedFiles: number;
   deletedFiles: number;
 } {
-  let addedFiles = 0;
+  let newFiles = 0;
+  let modifiedFiles = 0;
   let deletedFiles = 0;
 
   for (const line of output.split(/\r?\n/)) {
     if (line.length < 3) continue;
 
-    const indexStatus = line[0];
-    const worktreeStatus = line[1];
-    if (indexStatus === "D" || worktreeStatus === "D") {
-      deletedFiles += 1;
-      continue;
-    }
+    const x = line[0];
+    const y = line[1];
 
-    if (
-      indexStatus === "A" ||
-      indexStatus === "M" ||
-      indexStatus === "R" ||
-      indexStatus === "C" ||
-      worktreeStatus === "A" ||
-      worktreeStatus === "M" ||
-      line.startsWith("??")
-    ) {
-      addedFiles += 1;
+    if (line.startsWith("??")) {
+      newFiles += 1;
+    } else if (x === "D" || y === "D") {
+      deletedFiles += 1;
+    } else if (x === "A") {
+      newFiles += 1;
+    } else if (x === "M" || x === "R" || x === "C" || y === "M" || y === "A") {
+      modifiedFiles += 1;
     }
   }
 
-  return { addedFiles, deletedFiles };
+  return { newFiles, modifiedFiles, deletedFiles };
 }
 
 async function readLatestClaudeModelName(): Promise<string | undefined> {

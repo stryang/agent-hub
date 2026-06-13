@@ -1,4 +1,6 @@
+import { FileText, Globe } from "lucide-react";
 import type { ReactNode } from "react";
+import { DiffViewer } from "./DiffViewer";
 
 type MarkdownMessageProps = {
   text: string;
@@ -45,6 +47,9 @@ function MarkdownBlock({ block }: { block: Block }) {
   }
 
   if (block.type === "code") {
+    if (block.language === "diff" || isUnifiedDiff(block.code)) {
+      return <DiffViewer unifiedDiff={block.code} />;
+    }
     return (
       <pre>
         {block.language ? <span className="code-lang">{block.language}</span> : null}
@@ -227,9 +232,21 @@ function normalizeTableRow(row: string[], cellCount: number) {
   return [...row, ...Array.from({ length: cellCount - row.length }, () => "")];
 }
 
+function isUnifiedDiff(text: string): boolean {
+  return text.split("\n").some((l) => /^@@ -.+ \+.+ @@/.test(l));
+}
+
+function isExternalUrl(url: string): boolean {
+  return /^https?:\/\//.test(url);
+}
+
+function openExternal(url: string) {
+  void window.agentHub.openExternal(url);
+}
+
 function renderInline(text: string): ReactNode[] {
   const nodes: ReactNode[] = [];
-  const pattern = /(`[^`]+`|\*\*[^*]+\*\*)/g;
+  const pattern = /(`[^`]+`|\*\*[^*]+\*\*|\[([^\]]+)\]\(([^)]+)\))/g;
   let cursor = 0;
   let match: RegExpExecArray | null;
 
@@ -241,8 +258,34 @@ function renderInline(text: string): ReactNode[] {
     const token = match[0];
     if (token.startsWith("`")) {
       nodes.push(<code key={nodes.length}>{token.slice(1, -1)}</code>);
-    } else {
+    } else if (token.startsWith("**")) {
       nodes.push(<strong key={nodes.length}>{token.slice(2, -2)}</strong>);
+    } else {
+      const linkText = match[2];
+      const url = match[3];
+      if (isExternalUrl(url)) {
+        nodes.push(
+          <a
+            key={nodes.length}
+            style={{ color: "var(--accent)", cursor: "pointer", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "3px" }}
+            onClick={() => openExternal(url)}
+          >
+            <Globe size={13} style={{ flex: "none" }} />
+            {linkText}
+          </a>,
+        );
+      } else {
+        nodes.push(
+          <span
+            key={nodes.length}
+            style={{ color: "var(--accent)", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "3px" }}
+            onClick={() => void window.agentHub.showItemInFolder(url)}
+          >
+            <FileText size={13} style={{ flex: "none" }} />
+            {linkText}
+          </span>,
+        );
+      }
     }
 
     cursor = match.index + token.length;

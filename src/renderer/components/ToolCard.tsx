@@ -1,13 +1,19 @@
 import {
   AlertTriangle,
-  CheckCircle2,
+  Check,
+  Copy,
   FilePenLine,
   FileText,
   Shield,
   SquareTerminal,
 } from "lucide-react";
+import { useState } from "react";
 import type { AgentUiEvent } from "../../shared/types/agent-events";
 import { DiffViewer } from "./DiffViewer";
+
+function isUnifiedDiff(text: string): boolean {
+  return text.split("\n").some((l) => /^@@ -.+ \+.+ @@/.test(l));
+}
 
 type ToolCardProps = {
   event: AgentUiEvent;
@@ -47,23 +53,31 @@ export function ToolCard({ event }: ToolCardProps) {
   }
 
   if (event.type === "tool_start") {
+    if (event.tool === "edit" || event.tool === "write" || event.tool === "read" || event.tool === "unknown") return null;
+    const subtitle = event.tool !== "bash" ? (event.target ?? "Claude Code") : null;
     return (
       <div className="tool">
-        <div className="tool-head">
+        <div className={`tool-head${event.tool === "bash" ? " compact" : ""}`}>
           <span className="tool-icon">
             <ToolIcon kind={event.tool} />
           </span>
           <div className="tool-title">
             <strong>{labelForTool(event.tool)}</strong>
-            <span>{event.target ?? event.command ?? "Claude Code"}</span>
+            {subtitle ? <span>{subtitle}</span> : null}
           </div>
-          <span className="tag">运行中</span>
+          {event.tool === "bash" && event.command ? (
+            <CopyButton text={event.command} />
+          ) : null}
         </div>
+        {event.tool === "bash" && event.command ? (
+          <div className="tool-body">{event.command}</div>
+        ) : null}
       </div>
     );
   }
 
   if (event.type === "tool_output" || event.type === "raw_output") {
+    const isDiff = isUnifiedDiff(event.text);
     return (
       <div className="tool">
         <div className="tool-head">
@@ -76,26 +90,13 @@ export function ToolCard({ event }: ToolCardProps) {
           </div>
           <span className="tag">完成</span>
         </div>
-        <div className="tool-body">{event.text}</div>
+        {isDiff ? <DiffViewer unifiedDiff={event.text} /> : <div className="tool-body">{event.text}</div>}
       </div>
     );
   }
 
   if (event.type === "tool_done") {
-    return (
-      <div className="tool">
-        <div className="tool-head">
-          <span className="tool-icon">
-            <CheckCircle2 aria-hidden="true" />
-          </span>
-          <div className="tool-title">
-            <strong>工具调用</strong>
-            <span>Claude Code</span>
-          </div>
-          <span className="tag">{labelForStatus(event.status)}</span>
-        </div>
-      </div>
-    );
+    return null;
   }
 
   if (event.type === "permission_prompt") {
@@ -172,4 +173,21 @@ function ToolIcon({ kind }: { kind: string }) {
     return <FileText aria-hidden="true" />;
   }
   return <FilePenLine aria-hidden="true" />;
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  function handleCopy() {
+    void navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  return (
+    <button type="button" className="copy-btn" aria-label="复制命令" onClick={handleCopy}>
+      {copied ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
+    </button>
+  );
 }

@@ -19,7 +19,7 @@
 :root {
   --bg: transparent;
   --surface: #ffffff;
-  --sidebar: rgb(250 250 251 / 5%);
+  --sidebar: rgb(250 250 251 / 2%);
   --hover: rgb(0 0 0 / 7%);
   --active: rgb(0 0 0 / 8%);
   --fg: #0d0d0d;
@@ -28,9 +28,9 @@
   --border: #e0e0e8;
   --border2: #ebebf0;
   --green: #00a240;
-  --diff: #0d1117;
-  --add: #091a10;
-  --del: #200b0b;
+  --diff: #f0f0f2;
+  --add: #e6f5eb;
+  --del: #fce8e8;
   --red: #e02e2a;
   --sh: 0 8px 22px rgb(17 17 24 / 7%);
   --mono: "SF Mono", ui-monospace, Menlo, Monaco, monospace;
@@ -53,6 +53,7 @@ body {
   background: var(--bg);
   color: var(--fg);
   font: 14px/1.5 var(--font);
+  font-weight: 450;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }

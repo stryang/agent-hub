@@ -7,6 +7,7 @@ export type ClaudeSession = {
   projectName: string;
   lastModified: number;
   messageCount: number;
+  modelName?: string;
   gitBranch?: string;
   transcriptPath?: string;
 };

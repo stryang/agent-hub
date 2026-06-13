@@ -7,6 +7,8 @@ import type { AgentHubApi } from "./global.js";
 
 const api: AgentHubApi = {
   version: "0.1.0",
+  openExternal: (url: string) => ipcRenderer.invoke("shell:open-external", url),
+  showItemInFolder: (filePath: string) => ipcRenderer.invoke("shell:show-item-in-folder", filePath),
 
   // Claude Code
   getConfig: () => ipcRenderer.invoke("config:get"),

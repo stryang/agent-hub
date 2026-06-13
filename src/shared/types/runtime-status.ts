@@ -4,7 +4,8 @@ export type RuntimeStatus = {
   git: {
     available: boolean;
     branch?: string;
-    addedFiles?: number;
+    newFiles?: number;
+    modifiedFiles?: number;
     deletedFiles?: number;
   };
 };

@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { AgentUiEvent } from "../../shared/types/agent-events.js";
+import type { AgentUiEvent, ToolKind } from "../../shared/types/agent-events.js";
 import type {
   ClaudeSession,
   ClaudeSessionGroup,
@@ -186,6 +186,7 @@ export class ClaudeSessionService {
     let messageCount = 0;
     let firstUserText = "";
     let sanitizedSummary = "";
+    let modelName: string | undefined;
     const events: AgentUiEvent[] = [];
 
     for (const line of lines) {
@@ -209,6 +210,11 @@ export class ClaudeSessionService {
       const message = record.message as TranscriptMessage | undefined;
       if (!message?.role) continue;
 
+      if (!modelName && isRecord(message) && typeof (message as Record<string, unknown>).model === "string") {
+        const candidate = ((message as Record<string, unknown>).model as string).trim();
+        if (candidate && candidate !== "unknown") modelName = candidate;
+      }
+
       if (message.role === "user") {
         const extracted = extractUserTranscriptEvent(record, message.content);
         if (!extracted) continue;
@@ -224,15 +230,18 @@ export class ClaudeSessionService {
 
       if (message.role === "assistant") {
         const text = extractAssistantText(message.content);
-        if (!text) continue;
+        const toolEvents = options.includeEvents
+          ? extractAssistantToolEvents(message.content, finiteTimestamp)
+          : [];
+
+        if (!text && toolEvents.length === 0) continue;
 
         messageCount += 1;
-        if (text && options.includeEvents) {
-          events.push({
-            type: "assistant_message",
-            text,
-            timestamp: finiteTimestamp,
-          });
+        if (options.includeEvents) {
+          if (text) {
+            events.push({ type: "assistant_message", text, timestamp: finiteTimestamp });
+          }
+          events.push(...toolEvents);
         }
       }
     }
@@ -249,6 +258,7 @@ export class ClaudeSessionService {
         projectName,
         lastModified,
         messageCount,
+        modelName,
         transcriptPath,
       },
       events,
@@ -335,17 +345,80 @@ function extractAssistantText(content: unknown): string {
 function isUserAuthoredRecord(record: Record<string, unknown>): boolean {
   if (record.type !== "user") return false;
   if (record.isMeta === true) return false;
+  if (record.isCompactSummary === true) return false;
   if ("toolUseResult" in record) return false;
   if (typeof record.sourceToolAssistantUUID === "string") return false;
   return true;
 }
 
+function extractAssistantToolEvents(content: unknown, timestamp: number): AgentUiEvent[] {
+  if (!Array.isArray(content)) return [];
+  const events: AgentUiEvent[] = [];
+
+  for (const block of content) {
+    if (!isRecord(block) || block.type !== "tool_use") continue;
+
+    const toolName = typeof block.name === "string" ? block.name.toLowerCase() : "";
+    const input = isRecord(block.input) ? block.input : {};
+    const filePath = typeof input.file_path === "string" ? input.file_path : "";
+    const tool = sessionToolKind(toolName);
+
+    const startEvent: AgentUiEvent = { type: "tool_start", tool, timestamp };
+    if ((tool === "read" || tool === "edit" || tool === "write") && filePath) {
+      startEvent.target = filePath;
+    }
+    if (tool === "bash" && typeof input.command === "string") {
+      startEvent.command = input.command;
+    }
+    events.push(startEvent);
+
+    if (tool === "edit") {
+      const oldStr = typeof input.old_string === "string" ? input.old_string : "";
+      const newStr = typeof input.new_string === "string" ? input.new_string : "";
+      if (oldStr || newStr) {
+        const oldLines = oldStr.split("\n");
+        const newLines = newStr.split("\n");
+        const diff =
+          `--- ${filePath}\n+++ ${filePath}\n@@ -1,${oldLines.length} +1,${newLines.length} @@\n` +
+          oldLines.map((l) => `-${l}`).join("\n") + "\n" +
+          newLines.map((l) => `+${l}`).join("\n");
+        events.push({ type: "diff", filePath, unifiedDiff: diff, timestamp });
+      }
+    } else if (tool === "write") {
+      const fileContent = typeof input.content === "string" ? input.content : "";
+      if (fileContent) {
+        const lines = fileContent.split("\n");
+        const diff =
+          `--- /dev/null\n+++ ${filePath}\n@@ -0,0 +1,${lines.length} @@\n` +
+          lines.map((l) => `+${l}`).join("\n");
+        events.push({ type: "diff", filePath, unifiedDiff: diff, timestamp });
+      }
+    }
+
+    events.push({ type: "tool_done", status: "success", timestamp });
+  }
+
+  return events;
+}
+
+function sessionToolKind(name: string): ToolKind {
+  switch (name) {
+    case "edit": return "edit";
+    case "write": return "write";
+    case "read": return "read";
+    case "bash": return "bash";
+    default: return "unknown";
+  }
+}
+
 function sanitizeUserVisibleText(text: string): string {
   const trimmed = text.trim();
   if (!trimmed) return "";
+  if (isInternalUserText(trimmed)) return "";
 
-  if (isInternalUserText(trimmed)) {
-    return "";
+  if (trimmed.startsWith("<command-name>")) {
+    const match = trimmed.match(/<command-name>([\s\S]*?)<\/command-name>/);
+    return match?.[1]?.trim() ?? "";
   }
 
   return stripLocalCommandTags(trimmed).trim();

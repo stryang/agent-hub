@@ -15,6 +15,7 @@ export function DiffViewer({ unifiedDiff }: DiffViewerProps) {
 
   return (
     <div className="diff">
+      <div className="diff-lines">
       {lines.map((line) =>
         line.kind === "hunk" ? (
           <span className="hunk" key={line.id}>
@@ -33,6 +34,7 @@ export function DiffViewer({ unifiedDiff }: DiffViewerProps) {
           </div>
         ),
       )}
+      </div>
     </div>
   );
 }
@@ -41,7 +43,7 @@ function parseDiff(unifiedDiff: string): ParsedDiffLine[] {
   let oldLine = 0;
   let newLine = 0;
 
-  return unifiedDiff.split(/\r?\n/).map((rawLine, index) => {
+  return unifiedDiff.split(/\r?\n/).filter((l) => !l.startsWith("---") && !l.startsWith("+++")).map((rawLine, index) => {
     const hunk = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@(.*)$/.exec(
       rawLine,
     );

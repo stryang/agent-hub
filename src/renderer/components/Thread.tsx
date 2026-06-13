@@ -34,13 +34,27 @@ export function Thread({ activeAgent, events }: ThreadProps) {
           </div>
         </div>
       ) : null}
-      {events.map((event, index) => (
-        <ThreadEvent
-          activeAgent={activeAgent}
-          event={event}
-          key={`${event.timestamp}:${event.type}:${index}`}
-        />
-      ))}
+      {events.map((event, index) => {
+        let prevVisible: AgentUiEvent | null = null;
+        for (let i = index - 1; i >= 0; i--) {
+          if (isVisibleEvent(events[i])) {
+            prevVisible = events[i];
+            break;
+          }
+        }
+        const isGroupStart =
+          isVisibleEvent(event) &&
+          event.type !== "user_message" &&
+          (!prevVisible || prevVisible.type === "user_message");
+        return (
+          <ThreadEvent
+            activeAgent={activeAgent}
+            event={event}
+            isGroupStart={isGroupStart}
+            key={`${event.timestamp}:${event.type}:${index}`}
+          />
+        );
+      })}
       {lastTimestamp ? (
         <div className="message-actions">
           <button type="button" aria-label="复制">
@@ -62,7 +76,33 @@ export function Thread({ activeAgent, events }: ThreadProps) {
   );
 }
 
-function ThreadEvent({ activeAgent, event }: { activeAgent: AgentKind; event: AgentUiEvent }) {
+function isVisibleEvent(event: AgentUiEvent): boolean {
+  if (event.type === "tool_done") return false;
+  if (event.type === "tool_start") return event.tool === "bash";
+  return true;
+}
+
+function AgentHeader({ activeAgent }: { activeAgent: AgentKind }) {
+  const label = AGENT_LABELS[activeAgent];
+  return (
+    <div className="agent-name">
+      <span className="logo">
+        {activeAgent === "codex" ? <CodexLogo /> : activeAgent === "hermes" ? <HermesLogo /> : <ClaudeLogo />}
+      </span>
+      <span className="agent-label-text">{label}</span>
+    </div>
+  );
+}
+
+function ThreadEvent({
+  activeAgent,
+  event,
+  isGroupStart,
+}: {
+  activeAgent: AgentKind;
+  event: AgentUiEvent;
+  isGroupStart: boolean;
+}) {
   if (event.type === "user_message") {
     return (
       <div className="user">
@@ -72,15 +112,9 @@ function ThreadEvent({ activeAgent, event }: { activeAgent: AgentKind; event: Ag
   }
 
   if (event.type === "assistant_message") {
-    const label = AGENT_LABELS[activeAgent];
     return (
       <div className="agent">
-        <div className="agent-name">
-          <span className="logo">
-            {activeAgent === "codex" ? <CodexLogo /> : activeAgent === "hermes" ? <HermesLogo /> : <ClaudeLogo />}
-          </span>
-          <span className="agent-label-text">{label}</span>
-        </div>
+        <AgentHeader activeAgent={activeAgent} />
         <div className="prose">
           <MarkdownMessage text={event.text} />
         </div>
@@ -88,11 +122,16 @@ function ThreadEvent({ activeAgent, event }: { activeAgent: AgentKind; event: Ag
     );
   }
 
-  return (
-    <div className="agent">
-      <ToolCard event={event} />
-    </div>
-  );
+  if (isGroupStart) {
+    return (
+      <div className="agent">
+        <AgentHeader activeAgent={activeAgent} />
+        <ToolCard event={event} />
+      </div>
+    );
+  }
+
+  return <ToolCard event={event} />;
 }
 
 function formatTimestamp(timestamp: number) {

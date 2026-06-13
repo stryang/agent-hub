@@ -20,6 +20,7 @@ export interface PromptInput {
   prompt: string;
   sessionId?: string;
   cwd?: string;
+  model?: string;
 }
 
 type EmitAgentEvent = (event: AgentUiEvent) => void;
@@ -108,6 +109,10 @@ export class ClaudeCodeAdapter {
 
     if (input.sessionId) {
       args.push("--resume", input.sessionId);
+    }
+
+    if (input.model) {
+      args.push("--model", input.model);
     }
 
     const child = this.spawnProcess(this.commandPath, args, {
@@ -290,24 +295,64 @@ export class ClaudeCodeAdapter {
     }
 
     if (block.type === "tool_use") {
-      const event = this.toolUseToEvent(block, timestamp);
-      runState.activeTool = event.tool;
-      return [event];
+      const startEvent = this.toolUseToEvent(block, timestamp);
+      runState.activeTool = startEvent.tool;
+      const events: AgentUiEvent[] = [startEvent];
+      const diffEvent = this.toolUseToDiff(block, timestamp);
+      if (diffEvent) events.push(diffEvent);
+      return events;
     }
 
     if (block.type === "tool_result") {
-      const output = toolResultContentToText(block.content);
-      const events: AgentUiEvent[] = [
-        { type: "tool_output", text: output, timestamp },
-      ];
+      const isFileOp = runState.activeTool === "edit" || runState.activeTool === "write";
+      runState.activeTool = null;
+      const events: AgentUiEvent[] = [];
+
+      if (!isFileOp) {
+        const output = toolResultContentToText(block.content);
+        events.push({ type: "tool_output", text: output, timestamp });
+      }
 
       events.push({ type: "tool_done", status: "success", timestamp });
-      runState.activeTool = null;
-
       return events;
     }
 
     return [];
+  }
+
+  private toolUseToDiff(
+    block: ClaudeContentBlock,
+    timestamp: number,
+  ): AgentUiEvent | null {
+    const tool = normalizeToolKind(block.name);
+    const input = isRecord(block.input) ? block.input : {};
+
+    if (tool === "edit") {
+      const filePath = typeof input.file_path === "string" ? input.file_path : "unknown";
+      const oldStr = typeof input.old_string === "string" ? input.old_string : "";
+      const newStr = typeof input.new_string === "string" ? input.new_string : "";
+      if (!oldStr && !newStr) return null;
+      return {
+        type: "diff",
+        filePath,
+        unifiedDiff: buildEditDiff(filePath, oldStr, newStr),
+        timestamp,
+      };
+    }
+
+    if (tool === "write") {
+      const filePath = typeof input.file_path === "string" ? input.file_path : "unknown";
+      const content = typeof input.content === "string" ? input.content : "";
+      if (!content) return null;
+      return {
+        type: "diff",
+        filePath,
+        unifiedDiff: buildWriteDiff(filePath, content),
+        timestamp,
+      };
+    }
+
+    return null;
   }
 
   private toolUseToEvent(
@@ -426,4 +471,20 @@ function toolResultContentToText(content: unknown): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+function buildEditDiff(filePath: string, oldStr: string, newStr: string): string {
+  const oldLines = oldStr.split("\n");
+  const newLines = newStr.split("\n");
+  const hunk = `@@ -1,${oldLines.length} +1,${newLines.length} @@`;
+  const deleted = oldLines.map((l) => `-${l}`).join("\n");
+  const added = newLines.map((l) => `+${l}`).join("\n");
+  return `--- ${filePath}\n+++ ${filePath}\n${hunk}\n${deleted}\n${added}`;
+}
+
+function buildWriteDiff(filePath: string, content: string): string {
+  const lines = content.split("\n");
+  const hunk = `@@ -0,0 +1,${lines.length} @@`;
+  const added = lines.map((l) => `+${l}`).join("\n");
+  return `--- /dev/null\n+++ ${filePath}\n${hunk}\n${added}`;
 }

@@ -11,7 +11,9 @@ type AgentStore = {
   selectedSessionId?: string;
   runId?: string;
   status: RunStatus;
+  selectedModel?: string;
   setActiveAgent: (agent: AgentKind) => void;
+  setSelectedModel: (model: string | undefined) => void;
   loadSessions: () => Promise<void>;
   selectSession: (sessionId: string) => Promise<void>;
   sendPrompt: (prompt: string) => Promise<void>;
@@ -24,10 +26,15 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   events: [],
   sessions: [],
   status: "idle",
+  selectedModel: undefined,
 
   setActiveAgent(agent) {
     set({ activeAgent: agent, events: [], sessions: [], selectedSessionId: undefined, runId: undefined, status: "idle" });
     void get().loadSessions();
+  },
+
+  setSelectedModel(model) {
+    set({ selectedModel: model });
   },
 
   async loadSessions() {
@@ -98,6 +105,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
           prompt: text,
           sessionId: selectedSessionId,
           cwd: claudeConfig?.defaultWorkingDirectory || undefined,
+          model: get().selectedModel,
         });
         set({ runId: response.runId, status: "running" });
       }

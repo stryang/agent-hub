@@ -1,4 +1,5 @@
-import { app, BrowserWindow } from "electron";
+import { execFile } from "node:child_process";
+import { app, BrowserWindow, ipcMain, shell } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { registerClaudeIpc } from "./ipc/claude-ipc.js";
@@ -33,6 +34,23 @@ registerClaudeIpc(
 registerCodexIpc(configStore, new CodexSessionService(), codexAdapter);
 registerHermesIpc(configStore, new HermesSessionService(), hermesAdapter);
 registerRuntimeIpc(new RuntimeStatusService());
+ipcMain.handle("shell:open-external", (_event, url: unknown) => {
+  if (typeof url === "string" && /^https?:\/\//.test(url)) {
+    return shell.openExternal(url);
+  }
+});
+ipcMain.handle("shell:show-item-in-folder", (_event, filePath: unknown) => {
+  if (typeof filePath === "string") {
+    const expanded = filePath.startsWith("~/")
+      ? path.join(app.getPath("home"), filePath.slice(2))
+      : filePath;
+    if (process.platform === "darwin") {
+      execFile("open", ["-R", expanded]);
+    } else {
+      shell.showItemInFolder(expanded);
+    }
+  }
+});
 
 async function createWindow() {
   const win = new BrowserWindow({

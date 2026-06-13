@@ -1,3 +1,4 @@
+import { execSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import type { AgentUiEvent } from "../../shared/types/agent-events.js";
@@ -7,13 +8,11 @@ import type {
   SessionPreview,
 } from "../../shared/types/sessions.js";
 
-const HERMES_GROUP_PATH = "hermes://sessions";
-const HERMES_GROUP_NAME = "Hermes";
 
 type DbSession = {
   id: string;
   title: string | null;
-  started_at: string;
+  started_at: string | number;
   message_count: number;
 };
 
@@ -31,43 +30,39 @@ export class HermesSessionService {
   ) {}
 
   async listSessions(): Promise<ClaudeSessionGroup[]> {
-    const dbSessions = await this.readSessions();
+    const dbSessions = this.readSessions();
     if (dbSessions.length === 0) return [];
 
-    const sessions: ClaudeSession[] = dbSessions.map((row) => ({
-      id: row.id,
-      title: row.title || row.id,
-      projectPath: HERMES_GROUP_PATH,
-      projectName: HERMES_GROUP_NAME,
-      lastModified: safeParseDate(row.started_at),
-      messageCount: row.message_count,
-      transcriptPath: "",
-    }));
-
-    const lastModified = Math.max(...sessions.map((s) => s.lastModified));
-
-    return [
-      {
-        projectPath: HERMES_GROUP_PATH,
-        projectName: HERMES_GROUP_NAME,
+    return dbSessions.map((row) => {
+      const name = row.title || row.id;
+      const groupPath = `hermes://session/${row.id}`;
+      const lastModified = safeParseDate(row.started_at);
+      const session: ClaudeSession = {
+        id: row.id,
+        title: name,
+        projectPath: groupPath,
+        projectName: name,
         lastModified,
-        sessions,
-      },
-    ];
+        messageCount: row.message_count,
+        transcriptPath: "",
+      };
+      return { projectPath: groupPath, projectName: name, lastModified, sessions: [session] };
+    });
   }
 
   async loadSession(sessionId: string): Promise<SessionPreview> {
-    const dbMessages = await this.readMessages(sessionId);
+    const dbMessages = this.readMessages(sessionId);
     const events = messagesToEvents(dbMessages);
 
-    const dbSessions = await this.readSessions();
+    const dbSessions = this.readSessions();
     const row = dbSessions.find((s) => s.id === sessionId);
 
+    const name = row?.title || sessionId;
     const session: ClaudeSession = {
       id: sessionId,
-      title: row?.title || sessionId,
-      projectPath: HERMES_GROUP_PATH,
-      projectName: HERMES_GROUP_NAME,
+      title: name,
+      projectPath: `hermes://session/${sessionId}`,
+      projectName: name,
       lastModified: row ? safeParseDate(row.started_at) : 0,
       messageCount: events.filter(
         (e) => e.type === "user_message" || e.type === "assistant_message",
@@ -78,67 +73,41 @@ export class HermesSessionService {
     return { session, events };
   }
 
-  private async readSessions(): Promise<DbSession[]> {
+  private readSessions(): DbSession[] {
     const dbPath = path.join(this.hermesDir, "state.db");
-    return new Promise((resolve) => {
-      try {
-        // Dynamic import to avoid top-level experimental warning in tests
-        const { DatabaseSync } = require("node:sqlite") as {
-          DatabaseSync: new (path: string) => {
-            prepare(sql: string): { all(): unknown[] };
-            close(): void;
-          };
-        };
-        const db = new DatabaseSync(dbPath);
-        try {
-          const rows = db
-            .prepare(
-              `SELECT id, title, started_at, message_count
-               FROM sessions
-               WHERE message_count > 0
-               ORDER BY started_at DESC
-               LIMIT 200`,
-            )
-            .all() as DbSession[];
-          resolve(rows);
-        } finally {
-          db.close();
-        }
-      } catch {
-        resolve([]);
-      }
-    });
+    try {
+      const sql =
+        "SELECT id, title, started_at, message_count FROM sessions WHERE message_count > 0 ORDER BY started_at DESC LIMIT 200";
+      const out = execSync(`sqlite3 -json ${sq(dbPath)} ${sq(sql)}`, {
+        encoding: "utf8",
+        timeout: 5000,
+      });
+      if (!out.trim()) return [];
+      return JSON.parse(out) as DbSession[];
+    } catch {
+      return [];
+    }
   }
 
-  private async readMessages(sessionId: string): Promise<DbMessage[]> {
+  private readMessages(sessionId: string): DbMessage[] {
     const dbPath = path.join(this.hermesDir, "state.db");
-    return new Promise((resolve) => {
-      try {
-        const { DatabaseSync } = require("node:sqlite") as {
-          DatabaseSync: new (path: string) => {
-            prepare(sql: string): { all(...params: unknown[]): unknown[] };
-            close(): void;
-          };
-        };
-        const db = new DatabaseSync(dbPath);
-        try {
-          const rows = db
-            .prepare(
-              `SELECT id, session_id, role, content, timestamp
-               FROM messages
-               WHERE session_id = ?
-               ORDER BY timestamp ASC`,
-            )
-            .all(sessionId) as DbMessage[];
-          resolve(rows);
-        } finally {
-          db.close();
-        }
-      } catch {
-        resolve([]);
-      }
-    });
+    try {
+      const escaped = sessionId.replace(/'/g, "''");
+      const sql = `SELECT id, session_id, role, content, timestamp FROM messages WHERE session_id = '${escaped}' ORDER BY timestamp ASC`;
+      const out = execSync(`sqlite3 -json ${sq(dbPath)} ${sq(sql)}`, {
+        encoding: "utf8",
+        timeout: 5000,
+      });
+      if (!out.trim()) return [];
+      return JSON.parse(out) as DbMessage[];
+    } catch {
+      return [];
+    }
   }
+}
+
+function sq(s: string): string {
+  return "'" + s.replace(/'/g, "'\\''") + "'";
 }
 
 function messagesToEvents(messages: DbMessage[]): AgentUiEvent[] {
@@ -183,7 +152,11 @@ function extractMessageText(content: string): string {
   return trimmed;
 }
 
-function safeParseDate(value: string): number {
+function safeParseDate(value: string | number): number {
+  if (typeof value === "number") {
+    const ms = value * 1000;
+    return Number.isFinite(ms) ? ms : 0;
+  }
   const ms = Date.parse(value);
   return Number.isFinite(ms) ? ms : 0;
 }

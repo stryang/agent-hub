@@ -3,11 +3,12 @@ import { ArrowUp, ChevronDown, Plus, ShieldCheck } from "lucide-react";
 
 type ComposerProps = {
   disabled?: boolean;
+  modelPicker?: ReactNode;
   statusBar?: ReactNode;
   onSubmit: (prompt: string) => void;
 };
 
-export function Composer({ disabled = false, statusBar, onSubmit }: ComposerProps) {
+export function Composer({ disabled = false, modelPicker, statusBar, onSubmit }: ComposerProps) {
   const [prompt, setPrompt] = useState("");
 
   function submit() {
@@ -39,13 +40,14 @@ export function Composer({ disabled = false, statusBar, onSubmit }: ComposerProp
         <button className="add-btn" type="button" disabled={disabled} aria-label="添加">
           <Plus aria-hidden="true" />
         </button>
-        <button className="mode-btn" type="button" disabled={disabled}>
+        <button className="mode-btn" type="button">
           <span className="mode-shield">
             <ShieldCheck aria-hidden="true" />
           </span>
           <span>替我审批</span>
           <ChevronDown className="chevron" aria-hidden="true" />
         </button>
+        {modelPicker}
         <span className="spacer" />
         {statusBar}
         <button

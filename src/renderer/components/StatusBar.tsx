@@ -1,40 +1,29 @@
 import { GitBranch } from "lucide-react";
-import type { AgentKind, RunStatus } from "../../shared/types/agent-events";
-import type {
-  ClaudeConfig,
-  ClaudeValidationResult,
-} from "../../shared/types/claude-config";
-import type { CodexValidationResult } from "../../shared/types/codex-config";
-import type { HermesValidationResult } from "../../shared/types/hermes-config";
+import type { RunStatus } from "../../shared/types/agent-events";
+import type { ClaudeConfig } from "../../shared/types/claude-config";
 import type { RuntimeStatus } from "../../shared/types/runtime-status";
 
 type StatusBarProps = {
   status: RunStatus;
-  activeAgent: AgentKind;
   commandPath?: string;
   config: ClaudeConfig | null;
-  validation: ClaudeValidationResult | CodexValidationResult | HermesValidationResult | null;
   runtimeStatus: RuntimeStatus | null;
 };
 
 export function StatusBar({
   status,
-  activeAgent,
-  commandPath,
-  config,
-  validation,
   runtimeStatus,
+  config,
+  commandPath,
 }: StatusBarProps) {
-  const modelName = getModelName(activeAgent, commandPath, config, validation, runtimeStatus);
   const statusText = statusLabel(status);
 
   return (
     <div className="status">
-      <span className="status-model">{modelName}</span>
       {statusText ? (
         <>
-          <span className="status-dot" />
           <span>{statusText}</span>
+          <span className="status-dot" />
         </>
       ) : null}
       <GitStatus runtimeStatus={runtimeStatus} configured={Boolean(config) || Boolean(commandPath)} />
@@ -42,33 +31,6 @@ export function StatusBar({
   );
 }
 
-function getModelName(
-  activeAgent: AgentKind,
-  commandPath: string | undefined,
-  config: ClaudeConfig | null,
-  validation: ClaudeValidationResult | CodexValidationResult | HermesValidationResult | null,
-  runtimeStatus: RuntimeStatus | null,
-) {
-  if (activeAgent === "codex") {
-    if (!commandPath) return "not configured";
-    if (!validation) return "Codex";
-    if (!validation.ok) return validation.code;
-    return `Codex ${validation.version}`;
-  }
-
-  if (activeAgent === "hermes") {
-    if (!commandPath) return "not configured";
-    if (!validation) return "Hermes";
-    if (!validation.ok) return validation.code;
-    return `Hermes ${validation.version}`;
-  }
-
-  if (!config) return "not configured";
-  if (runtimeStatus?.modelName) return runtimeStatus.modelName;
-  if (!validation) return "Claude Code";
-  if (!validation.ok) return validation.code;
-  return (validation as ClaudeValidationResult & { ok: true }).version.replace(/\s*\(Claude Code\)\s*$/, "");
-}
 
 function GitStatus({
   runtimeStatus,
@@ -85,21 +47,22 @@ function GitStatus({
     return null;
   }
 
-  const addedFiles = runtimeStatus.git.addedFiles ?? 0;
+  const newFiles = runtimeStatus.git.newFiles ?? 0;
+  const modifiedFiles = runtimeStatus.git.modifiedFiles ?? 0;
   const deletedFiles = runtimeStatus.git.deletedFiles ?? 0;
+  const clean = newFiles === 0 && modifiedFiles === 0 && deletedFiles === 0;
 
   return (
     <span className="git-status" id="statusBranch">
       <GitBranch className="git-branch-icon" aria-hidden="true" />
       <span>{runtimeStatus.git.branch ?? "detached"}</span>
-      {addedFiles === 0 && deletedFiles === 0 ? (
+      {clean ? (
         <span>clean</span>
       ) : (
         <>
-          {addedFiles > 0 ? <span className="git-add">+{addedFiles}</span> : null}
-          {deletedFiles > 0 ? (
-            <span className="git-del">-{deletedFiles}</span>
-          ) : null}
+          {newFiles > 0 ? <span className="git-add">+{newFiles}</span> : null}
+          {modifiedFiles > 0 ? <span className="git-mod">~{modifiedFiles}</span> : null}
+          {deletedFiles > 0 ? <span className="git-del">-{deletedFiles}</span> : null}
         </>
       )}
     </span>

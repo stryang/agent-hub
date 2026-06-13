@@ -103,6 +103,10 @@ export function normalizeClaudePromptInput(input: unknown): PromptInput {
     normalized.cwd = cwd;
   }
 
+  if (typeof input.model === "string" && input.model.trim().length > 0) {
+    normalized.model = input.model.trim();
+  }
+
   return normalized;
 }
 

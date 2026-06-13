@@ -19,6 +19,8 @@ import type { RuntimeStatus } from "../shared/types/runtime-status.js";
 
 export type AgentHubApi = {
   version: string;
+  openExternal(url: string): Promise<void>;
+  showItemInFolder(filePath: string): Promise<void>;
 
   // Claude Code
   getConfig(): Promise<ClaudeConfig | null>;
@@ -31,6 +33,7 @@ export type AgentHubApi = {
     prompt: string;
     sessionId?: string;
     cwd?: string;
+    model?: string;
   }): Promise<{ runId: string }>;
   cancelRun(runId: string): Promise<void>;
   onAgentEvent(callback: (event: AgentUiEvent) => void): () => void;
