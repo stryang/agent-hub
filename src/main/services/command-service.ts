@@ -46,35 +46,37 @@ export class CommandService {
   }
 
   private async loadCommands(agent: AgentKind, cwd?: string): Promise<AgentCommand[]> {
+    const home = os.homedir();
+
     if (agent === "claude-code") {
-      const home = os.homedir();
-      const tasks = [
-        readCustomCommands(path.join(home, ".claude", "commands")),
-        readFlatSkills(path.join(home, ".claude", "skills")),
+      const tasks: Promise<AgentCommand[]>[] = [
+        // Global: commands are flat .md files, skills are sub-directories (may include symlinks)
+        readMdFiles(path.join(home, ".claude", "commands"), "command"),
+        readDirSkills(path.join(home, ".claude", "skills")),
       ];
       if (cwd) {
+        // Project-level: skills can be either flat .md files OR sub-directories/symlinks
         tasks.push(
-          readCustomCommands(path.join(cwd, ".claude", "commands")),
-          readFlatSkills(path.join(cwd, ".claude", "skills")),
+          readMdFiles(path.join(cwd, ".claude", "commands"), "command"),
+          readAnySkills(path.join(cwd, ".claude", "skills")),
         );
       }
       const results = await Promise.all(tasks);
-      const deduped = dedupeByName([...CLAUDE_BUILTIN_COMMANDS, ...results.flat()]);
-      return deduped;
+      return dedupeByName([...CLAUDE_BUILTIN_COMMANDS, ...results.flat()]);
     }
 
     if (agent === "codex") {
-      const home = os.homedir();
-      const tasks = [readFlatSkills(path.join(home, ".codex", "skills"))];
+      const tasks: Promise<AgentCommand[]>[] = [
+        readDirSkills(path.join(home, ".codex", "skills")),
+      ];
       if (cwd) {
-        tasks.push(readFlatSkills(path.join(cwd, ".codex", "skills")));
+        tasks.push(readAnySkills(path.join(cwd, ".codex", "skills")));
       }
       const results = await Promise.all(tasks);
       return dedupeByName(results.flat());
     }
 
     if (agent === "hermes") {
-      const home = os.homedir();
       return readHermesSkills(path.join(home, ".hermes", "skills"));
     }
 
@@ -82,8 +84,11 @@ export class CommandService {
   }
 }
 
-/** Read ~/.claude/commands/*.md — each file is a named command with frontmatter */
-async function readCustomCommands(dir: string): Promise<AgentCommand[]> {
+/**
+ * Read a directory of .md files, each becoming a command/skill.
+ * Used for ~/.claude/commands/ and project-level flat skill files.
+ */
+async function readMdFiles(dir: string, source: AgentCommand["source"]): Promise<AgentCommand[]> {
   try {
     const entries = await fs.readdir(dir, { withFileTypes: true });
     const results = await Promise.all(
@@ -91,9 +96,11 @@ async function readCustomCommands(dir: string): Promise<AgentCommand[]> {
         .filter((e) => e.isFile() && e.name.endsWith(".md"))
         .map(async (e): Promise<AgentCommand> => {
           const name = e.name.slice(0, -3);
-          const content = await fs.readFile(path.join(dir, e.name), "utf8").catch(() => "");
+          const content = await fs
+            .readFile(path.join(dir, e.name), "utf8")
+            .catch(() => "");
           const { description, argumentHint } = parseFrontmatter(content);
-          return { name, description, argumentHint, source: "command" };
+          return { name, description, argumentHint, source };
         }),
     );
     return results.sort((a, b) => a.name.localeCompare(b.name));
@@ -103,48 +110,98 @@ async function readCustomCommands(dir: string): Promise<AgentCommand[]> {
 }
 
 /**
- * Read a flat skills directory where each sub-dir has a SKILL.md.
- * Used for ~/.claude/skills and ~/.codex/skills.
+ * Read a directory where each sub-entry is a sub-dir (or symlink to dir) containing SKILL.md.
+ * Used for ~/.claude/skills/ and ~/.codex/skills/.
  */
-async function readFlatSkills(skillsDir: string): Promise<AgentCommand[]> {
+async function readDirSkills(skillsDir: string): Promise<AgentCommand[]> {
   try {
     const entries = await fs.readdir(skillsDir, { withFileTypes: true });
     const results = await Promise.all(
       entries
-        .filter((e) => e.isDirectory())
-        .map(async (e): Promise<AgentCommand> => {
+        .filter((e) => e.isDirectory() || e.isSymbolicLink())
+        .map(async (e): Promise<AgentCommand | null> => {
+          const entryPath = path.join(skillsDir, e.name);
+          // fs.stat follows symlinks; skip if target is not a directory
+          const stat = await fs.stat(entryPath).catch(() => null);
+          if (!stat?.isDirectory()) return null;
           const content = await fs
-            .readFile(path.join(skillsDir, e.name, "SKILL.md"), "utf8")
+            .readFile(path.join(entryPath, "SKILL.md"), "utf8")
             .catch(() => "");
           const { description } = parseFrontmatter(content);
-          return { name: e.name, description, source: "skill" };
+          return { name: e.name, description, source: "skill" as const };
         }),
     );
-    return results.sort((a, b) => a.name.localeCompare(b.name));
+    return (results.filter(Boolean) as AgentCommand[]).sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
   } catch {
     return [];
   }
 }
 
 /**
- * Read Hermes skills directory which has a two-level structure:
- *   ~/.hermes/skills/<group>/DESCRIPTION.md  — group meta
- *   ~/.hermes/skills/<group>/<skill>/SKILL.md — individual skills
+ * Read a project-level skills directory that may contain either:
+ * - Flat .md files (AICoding-style)
+ * - Sub-directories or symlinks to directories with SKILL.md (dify-style)
+ */
+async function readAnySkills(skillsDir: string): Promise<AgentCommand[]> {
+  try {
+    const entries = await fs.readdir(skillsDir, { withFileTypes: true });
+    const results = await Promise.all(
+      entries.map(async (e): Promise<AgentCommand | null> => {
+        if (e.isFile() && e.name.endsWith(".md")) {
+          const name = e.name.slice(0, -3);
+          const content = await fs
+            .readFile(path.join(skillsDir, e.name), "utf8")
+            .catch(() => "");
+          const { description, argumentHint } = parseFrontmatter(content);
+          return { name, description, argumentHint, source: "skill" };
+        }
+
+        if (e.isDirectory() || e.isSymbolicLink()) {
+          const entryPath = path.join(skillsDir, e.name);
+          const stat = await fs.stat(entryPath).catch(() => null);
+          if (!stat?.isDirectory()) return null;
+          const content = await fs
+            .readFile(path.join(entryPath, "SKILL.md"), "utf8")
+            .catch(() => "");
+          const { description } = parseFrontmatter(content);
+          return { name: e.name, description, source: "skill" };
+        }
+
+        return null;
+      }),
+    );
+    return (results.filter(Boolean) as AgentCommand[]).sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Read Hermes two-level skill structure:
+ *   ~/.hermes/skills/<group>/DESCRIPTION.md  → group meta (not a skill itself)
+ *   ~/.hermes/skills/<group>/<skill>/SKILL.md → individual skill
  *
- * Top-level dirs that contain SKILL.md directly are also treated as flat skills.
+ * If the top-level dir contains SKILL.md directly, treat it as a flat skill.
  */
 async function readHermesSkills(skillsDir: string): Promise<AgentCommand[]> {
   try {
     const topEntries = await fs.readdir(skillsDir, { withFileTypes: true });
     const results = await Promise.all(
       topEntries
-        .filter((e) => e.isDirectory())
+        .filter((e) => e.isDirectory() || e.isSymbolicLink())
         .map(async (e): Promise<AgentCommand[]> => {
           const topDir = path.join(skillsDir, e.name);
+          const stat = await fs.stat(topDir).catch(() => null);
+          if (!stat?.isDirectory()) return [];
+
           const children = await fs.readdir(topDir, { withFileTypes: true }).catch(() => []);
 
-          const hasDirectSkill = children.some((c) => c.isFile() && c.name === "SKILL.md");
-          if (hasDirectSkill) {
+          // Flat skill: SKILL.md directly in top-level dir
+          if (children.some((c) => c.isFile() && c.name === "SKILL.md")) {
             const content = await fs
               .readFile(path.join(topDir, "SKILL.md"), "utf8")
               .catch(() => "");
@@ -152,19 +209,22 @@ async function readHermesSkills(skillsDir: string): Promise<AgentCommand[]> {
             return [{ name: e.name, description, source: "skill" }];
           }
 
-          // Group dir: collect sub-skill dirs
+          // Group dir: read sub-skill directories
           const subSkills = await Promise.all(
             children
-              .filter((c) => c.isDirectory())
-              .map(async (c): Promise<AgentCommand> => {
+              .filter((c) => c.isDirectory() || c.isSymbolicLink())
+              .map(async (c): Promise<AgentCommand | null> => {
+                const subPath = path.join(topDir, c.name);
+                const subStat = await fs.stat(subPath).catch(() => null);
+                if (!subStat?.isDirectory()) return null;
                 const content = await fs
-                  .readFile(path.join(topDir, c.name, "SKILL.md"), "utf8")
+                  .readFile(path.join(subPath, "SKILL.md"), "utf8")
                   .catch(() => "");
                 const { description } = parseFrontmatter(content);
-                return { name: c.name, description, source: "skill" };
+                return { name: c.name, description, source: "skill" as const };
               }),
           );
-          return subSkills;
+          return subSkills.filter(Boolean) as AgentCommand[];
         }),
     );
 

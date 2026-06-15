@@ -1,4 +1,5 @@
 import { ipcMain } from "electron";
+import path from "node:path";
 import type { AgentKind } from "../../shared/types/agent-events.js";
 import type { CommandService } from "../services/command-service.js";
 
@@ -12,7 +13,11 @@ export function registerCommandIpc(commandService: CommandService) {
     }
 
     let resolvedCwd: string | undefined;
-    if (typeof cwd === "string" && cwd.trim().length > 0 && cwd.length <= MAX_CWD_LENGTH) {
+    if (
+      typeof cwd === "string" &&
+      cwd.length <= MAX_CWD_LENGTH &&
+      path.isAbsolute(cwd.trim())
+    ) {
       resolvedCwd = cwd.trim();
     }
 
