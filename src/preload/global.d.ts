@@ -1,4 +1,5 @@
-import type { AgentUiEvent } from "../shared/types/agent-events.js";
+import type { AgentCommand } from "../shared/types/agent-commands.js";
+import type { AgentKind, AgentUiEvent } from "../shared/types/agent-events.js";
 import type {
   ClaudeConfig,
   ClaudeValidationResult,
@@ -29,6 +30,7 @@ export type AgentHubApi = {
   listSessions(): Promise<ClaudeSessionGroup[]>;
   loadSession(sessionId: string): Promise<SessionPreview>;
   getRuntimeStatus(cwd: string): Promise<RuntimeStatus>;
+  listAgentCommands(agent: AgentKind, cwd?: string): Promise<AgentCommand[]>;
   sendPrompt(input: {
     prompt: string;
     sessionId?: string;

@@ -206,6 +206,8 @@ export function App() {
 
           <footer className="input-area">
             <Composer
+              activeAgent={activeAgent}
+              projectPath={projectPath !== "~" ? projectPath : undefined}
               disabled={
                 (activeAgent === "codex"
                   ? codexConfig === null

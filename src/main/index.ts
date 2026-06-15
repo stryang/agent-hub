@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { registerClaudeIpc } from "./ipc/claude-ipc.js";
 import { registerCodexIpc } from "./ipc/codex-ipc.js";
+import { registerCommandIpc } from "./ipc/command-ipc.js";
 import { registerConfigIpc } from "./ipc/config-ipc.js";
 import { registerHermesIpc } from "./ipc/hermes-ipc.js";
 import { registerRuntimeIpc } from "./ipc/runtime-ipc.js";
@@ -12,6 +13,7 @@ import { ClaudeCodeAdapter } from "./services/claude-code-adapter.js";
 import { ClaudeSessionService } from "./services/claude-session-service.js";
 import { CodexAdapter } from "./services/codex-adapter.js";
 import { CodexSessionService } from "./services/codex-session-service.js";
+import { CommandService } from "./services/command-service.js";
 import { CommandValidator } from "./services/command-validator.js";
 import { HermesAdapter } from "./services/hermes-adapter.js";
 import { HermesSessionService } from "./services/hermes-session-service.js";
@@ -34,6 +36,7 @@ registerClaudeIpc(
 registerCodexIpc(configStore, new CodexSessionService(), codexAdapter);
 registerHermesIpc(configStore, new HermesSessionService(), hermesAdapter);
 registerRuntimeIpc(new RuntimeStatusService());
+registerCommandIpc(new CommandService());
 ipcMain.handle("shell:open-external", (_event, url: unknown) => {
   if (typeof url === "string" && /^https?:\/\//.test(url)) {
     return shell.openExternal(url);
